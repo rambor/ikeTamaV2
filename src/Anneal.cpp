@@ -186,7 +186,7 @@ void Anneal::fillPrBinsAndAssignTotalBin(PointSetModel * pModel, PofRData * pDat
     maxbin += 1;
 
     totalBins = pData->getShannonBins(); // set by experimental input Data file
-    // maxbin and totalBins will be differenct
+    // maxbin and totalBins will be different
     maxbin = (maxbin > totalBins) ? maxbin : totalBins; // choose the greater of the two
 
 }

@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.8)
 project(ikeTama)
 
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wall -g1 -DNDEBUG")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wall -g1 -DNDEBUG -O3 ")
 set(CMAKE_CXX_STANDARD 11)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -pthread -msse4.1 -I${CMAKE_CURRENT_SOURCE_DIR}/src/thirdparty")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -pthread -msse4.1 -mavx -I${CMAKE_CURRENT_SOURCE_DIR}/src/thirdparty")
 MESSAGE("** SYSTEM : ${CMAKE_SYSTEM_NAME}")
 
 
@@ -45,6 +45,10 @@ MESSAGE("** BOOST SPECIAL => ${BOOST_RANDOM}")
 MESSAGE("** BOOST SPECIAL => ${BOOST_REGEX}")
 MESSAGE("** BOOST SPECIAL => ${BOOST_SYSTEM}")
 MESSAGE("** BOOST INCLUDE DIRECTORY: ${Boost_INCLUDE_DIR}")
+MESSAGE("** gFORT => ${CMAKE_Fortran_COMPILER}")
+
+set(CMAKE_Fortran_MODULE_DIRECTORY ${BOOSTROOT}/src/fsrc)
+add_subdirectory(src/fsrc)
 
 MESSAGE("** CURRENT SOURCE DIRECTORY MAIN : ${CMAKE_CURRENT_SOURCE_DIR}")
 
@@ -56,21 +60,60 @@ find_library(QHULLCPP_LIB libqhullcpp.a PATHS ~/src_libs/qhull-2015.2/lib)
 
 find_library(SASTools REQUIRED)
 
+find_package(OpenCL REQUIRED)
+include_directories(${OpenCL_INCLUDE_DIRS})
+link_directories(${OpenCL_LIBRARY})
+if (OpenCL_FOUND)
+    MESSAGE("** OPENCL FOUND AT => ${OpenCL_INCLUDE_DIR}")
+    MESSAGE("** OPENCL FOUND AT => ${OpenCL_INCLUDE_DIRS}")
+endif()
+
 set(SOURCE_FILES main.cpp)
 #add_subdirectory(src/utils)
 include(src/CMakeLists.txt)
 include(src/utils/CMakeLists.txt)
 include(src/EulerTour/CMakeLists.txt)
 include(src/Annealer/CMakeLists.txt)
+include(src/SHEMapper/CMakeLists.txt)
 MESSAGE("** SOURCE FILES => ${SOURCE_FILES}")
 
 add_executable(ikeTama ${SOURCE_FILES})
 
-target_link_libraries(ikeTama
-        PUBLIC
-        ${BOOST_FILESYSTEM} ${BOOST_PO} ${BOOST_RANDOM} ${BOOST_REGEX} ${BOOST_SYSTEM}
-        ${QHULL_LIB} ${QHULLCPP_LIB} SASTools
-        )
+
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+    MESSAGE("** with ${CMAKE_CXX_COMPILER_ID}")
+    SET(CMAKE_EXE_LINKER_FLAGS "-lgfortran" )
+elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+    MESSAGE("** LINKING WILL BE PERFORMED WITH -lgfortran")
+    SET(CMAKE_EXE_LINKER_FLAGS "-L${GFORTRAN_LIB} -lgfortran" )
+    # if using icc and gfortran
+elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
+
+    # if using MS Visual Studio and gfortran
+elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+
+endif()
+
+#find_package(OpenMP)
+set (OPENMP_FOUND FALSE)
+if(OPENMP_FOUND)
+    MESSAGE("** openMP ")
+    target_link_libraries(ikeTama
+            PUBLIC
+            ${OpenMP_CXX_FLAGS}
+            ${BOOST_FILESYSTEM} ${BOOST_PO} ${BOOST_RANDOM} ${BOOST_REGEX} ${BOOST_SYSTEM}
+            ${QHULL_LIB} ${QHULLCPP_LIB} SASTools fSAXS
+            )
+
+else()
+    target_link_libraries(ikeTama
+            PUBLIC
+            ${BOOST_FILESYSTEM} ${BOOST_PO} ${BOOST_RANDOM} ${BOOST_REGEX} ${BOOST_SYSTEM}
+            OpenCL::OpenCL ${QHULL_LIB} ${QHULLCPP_LIB} SASTools fSAXS
+            )
+endif()
+
+
 
 
 # on install, create distribution directory and bin and lib subdirectores

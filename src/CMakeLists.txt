@@ -7,6 +7,7 @@ list(APPEND SOURCE_FILES
         "${CMAKE_CURRENT_LIST_DIR}/Component.cpp"
         "${CMAKE_CURRENT_LIST_DIR}/Anneal.cpp"
         "${CMAKE_CURRENT_LIST_DIR}/Objective.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/DensityMapper.cpp"
         )
 
 MESSAGE("** SOURCE FILES => ${SOURCE_FILES}")

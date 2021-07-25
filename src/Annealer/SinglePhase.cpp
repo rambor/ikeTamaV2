@@ -156,12 +156,13 @@ bool Anneal::createInitialModelCVXHull(PointSetModel *pModel, PofRData *pData, s
         highTempRounds = 41379;
     }
 
+    unsigned int updater = 397;
     for (high=0; high < highTempRounds; high++) { // iterations during the high temp search
 
         if (distribution(gen) < probabilityAddRemove ){
 
             if ( (distribution(gen) < 0.53 && workingLimit < upperN) || workingLimit < lowerN ){
-                std::cout << "*******************                  ADD                   ******************* "  << std::endl;
+//                std::cout << "*******************                  ADD                   ******************* "  << std::endl;
 
                 testIndex = getUseableNeighborWeighted(&beads_in_use_tree, pModel, bead_indices[randomIndex(gen)]);
                 while(testIndex == pModel->getNeighborLimit()){
@@ -190,6 +191,7 @@ bool Anneal::createInitialModelCVXHull(PointSetModel *pModel, PofRData *pData, s
                 // waste of time since connectivity will remain constant?  No, if connectivity is 2, I could add a position that changes to 1
                 tempNumberOfComponents = eulerTour.addNode(testIndex, pModel);
 
+                // will be very slow calculation for large systems!
                 test_volume = calculateCVXHULLVolume(flags, &bead_indices, workingLimit, pModel);
                 temp_volume_energy = (float)(muConstant*test_volume/(double)workingLimit);
 
@@ -205,7 +207,7 @@ bool Anneal::createInitialModelCVXHull(PointSetModel *pModel, PofRData *pData, s
                 }
 
             } else {
-                std::cout << "*******************                 REMOVE                 ******************* "  << std::endl;
+//                std::cout << "*******************                 REMOVE                 ******************* "  << std::endl;
                 // grab from randomized active_indices list
                 rI = randomIndex(gen);
                 testIndex = bead_indices[rI];
@@ -232,7 +234,7 @@ bool Anneal::createInitialModelCVXHull(PointSetModel *pModel, PofRData *pData, s
 
         } else {
 
-            std::cout << "*******************               POSITIONAL               *******************" << std::endl;
+//            std::cout << "*******************               POSITIONAL               *******************" << std::endl;
             // recalculate
             // calculate convex hull and get hull points
             // can be threaded
@@ -367,13 +369,15 @@ bool Anneal::createInitialModelCVXHull(PointSetModel *pModel, PofRData *pData, s
 
         updateASAConstantTemp(high, highTempRounds, acceptRate, lowTempStop, inv_kb_temp);
 
-        std::cout << "*******************                                        *******************" << std::endl;
-        printf("       ACCEPTRATE : %5.3f       STEP : %-7i (%7i)\n", acceptRate, high, highTempRounds);
-        printf("            GRAPH : %5i   FAILURES : %i %s\n", currentNumberOfComponents, failures, switched.c_str());
-        printf("            LIMIT : %5i   UPPER >= %i LOWER <= %i POOL : %i\n", workingLimit, upperN, lowerN, hullsize);
-        printf("           VOLUME : %.0f (%d) MU : %.2E \n", current_volume, upperV, muConstant);
-        printf("         %s : %.4E E_VOL : %.2E ENRGY : %.4E \n", score, currentKL, current_volume_energy, current_energy);
-        std::cout << "*******************                                        *******************" << std::endl;
+        if (high%updater == 0){
+            std::cout << "*******************                                        *******************" << std::endl;
+            printf("       ACCEPTRATE : %5.3f       STEP : %-7i (%7i)\n", acceptRate, high, highTempRounds);
+            printf("            GRAPH : %5i   FAILURES : %i %s\n", currentNumberOfComponents, failures, switched.c_str());
+            printf("            LIMIT : %5i   UPPER >= %i LOWER <= %i POOL : %i\n", workingLimit, upperN, lowerN, hullsize);
+            printf("           VOLUME : %.0f (%d) MU : %.2E \n", current_volume, upperV, muConstant);
+            printf("         %s : %.4E E_VOL : %.2E ENRGY : %.4E \n", score, currentKL, current_volume_energy, current_energy);
+            std::cout << "*******************                                        *******************" << std::endl;
+        }
 
         modulo = (high%171) ? true : modulo;
         // check Pr values

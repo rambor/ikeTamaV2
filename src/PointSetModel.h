@@ -174,7 +174,12 @@ public:
 
 
     unsigned int getTotalInSeed(){ return this->total_in_seed; }
+
+
+
     void createSeedFromPDB(std::string filename, PofRData * pData, unsigned int totalBins, std::vector<double> * pdbPr);
+
+
     void createSeedFromPDBSym(std::string filename, PofRData * pData, unsigned int totalBins, std::vector<double> * pdbPr);
 
     void copySeedVectorIntoSet(std::set<unsigned int> & pSet){ for(auto & val : seed_indices){ pSet.insert(val);};}

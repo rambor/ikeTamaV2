@@ -23,6 +23,7 @@
 #include "src/PointSetModel.h"
 #include "src/KDE.h"
 #include "src/Objective.h"
+#include "src/DensityMapper.h"
 
 using namespace std::regex_constants;
 namespace po = boost::program_options;
@@ -289,6 +290,34 @@ int main(int argc, char** argv) {
 
             std::cout << "  => creating KDE CE map " << std::endl;
             std::vector<std::string> datfiles = vm["dat"].as<std::vector<std::string> >();
+
+
+            IofQData iofqdata_bsa = IofQData(datfiles[0], false);
+            iofqdata_bsa.extractData();
+            iofqdata_bsa.makeWorkingSet();
+            //auto workingset = iofqdata_bsa.getWorkingSet();
+            auto workingset = iofqdata_bsa.getWorkingSetSmoothed();
+            float qmax = iofqdata_bsa.getQmax();
+
+            DensityMapper dm(maskFile, qmax, 2.5);
+
+            // maxBin should be adjusted to 19 for ribo data, 150 is too small for dmax
+            //dm.setBessels(iofqdata_bsa.getQvalues());
+            //dm.calculateDensityCoefficientAtLMR();
+            //int totalroounds = dm.getTotalCenteredCoordinates()*10/0.01;
+
+//            dm.openMP();
+            dm.refineModel(50, 0.00713, 17137, workingset);
+//            auto qvalues = iofqdata_bsa.getQvalues();
+//            int total_in = qvalues.size();
+//
+//            for(int i=0; i<total_in; i++){
+//                std::cout << i << " " << qvalues[i] << " " << dm.calculateIntensityAtQ(i) << std::endl;
+//            }
+
+
+return 1;
+
             PofRData data(datfiles[0], false);
             bead_radius = (float)(0.4999999999 * (data.getBinWidth()));
 
@@ -317,7 +346,6 @@ int main(int argc, char** argv) {
                 }
 
             } else {
-
                 // create my universe using a spacing based on
                 //float kde_bead_radius = (bead_radius - kde.getDminStDev());
                 float kde_bead_radius = 0.75f*bead_radius;
@@ -383,9 +411,9 @@ int main(int argc, char** argv) {
 
             /*
              * for tetrahedron, radius of circumscribing sphere is 1.22*d_max
-             * I am guess, but 1.3 should work in most cases;
+             * As a guess, 1.3 should work in most cases;
              */
-            float searchSpace = (isSeeded && !refine) ? (mainDataset->getDmax() * 1.37f) : mainDataset->getDmax()*1.3f;
+            float searchSpace = (isSeeded && !refine) ? (mainDataset->getDmax() * 1.47f) : mainDataset->getDmax()*1.4f;
 
             /*
              * create Search Space Universe : PointSetModel

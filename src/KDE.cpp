@@ -115,7 +115,11 @@ void KDE::extractCoordinates(){
         centered_coordinates.emplace_back(*(pVec + n) - centering_vec);
     }
 
-
+    /*
+     * calculate smallest distances in set
+     * for each lattice point, determine closest point
+     * report min and max and average
+     */
     std::vector<float> dmin;
     float dminSum =0.0f;
     float dminSumSquare =0.0f;
@@ -166,7 +170,6 @@ void KDE::extractCoordinates(){
     maxx += bead_radius;
     maxy += bead_radius;
     maxz += bead_radius;
-
 
     cminx = minx - centering_vec.x;
     cminy = miny - centering_vec.y;

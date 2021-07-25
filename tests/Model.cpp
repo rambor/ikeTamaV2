@@ -95,10 +95,11 @@ TEST_F(ModelTest, checkBasicConstructor){
 }
 
 TEST_F(ModelTest, checkConvertToBin){
+
     PofRData ribo( tests::fixture_files("30S_0p22_pr.dat"), false);
     float bead_radius =  (float)(ribo.getBinWidth()/2.0f);
     PointSetModel model(ribo.getDmax()*1.2, bead_radius);
     // pModel->populateBins(pData)
     unsigned short int maxbin = model.populateBins(&ribo);
-    ASSERT_EQ(maxbin, 25); // largest bin based on data and size of universe;
+    ASSERT_EQ(maxbin, 22); // largest bin based on data and size of universe;
 }

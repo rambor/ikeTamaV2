@@ -37,8 +37,9 @@ TEST_F(AnnealerTest, basicPrLoadTest){
     std::string text ="tmp";
     Anneal anneal(0.001, 0.44, 1234, text, 0.01, 0.01, 0.02, 0.03, 0.02, 45, 0.12, interconnectivityCutOff);
     anneal.fillPrBinsAndAssignTotalBin(&basic, &ribo30S);
+
     // maxBin should be adjusted to 19 for ribo data, 150 is too small for dmax
-    ASSERT_EQ(anneal.getMaxBin(), 26);
+    ASSERT_EQ(anneal.getMaxBin(), 23);
 }
 
 TEST_F(AnnealerTest, getUseableNeighborFromSetTest){
@@ -259,5 +260,6 @@ TEST_F(AnnealerTest, estimateMagnitudeOfDifferenceContactsPotential){
             &basic);
     
     std::cout << " delta " << delta << std::endl;
-    ASSERT_GT(delta, 0);
+    ASSERT_NEAR(delta, 0.0d, 0.00001);
+    //ASSERT_GT(delta, 0);
 }
