@@ -891,7 +891,7 @@ void DensityMapper::createXPLORMap(std::string name){
      * reverse the order for each section
      */
     tempHeader = headerParametersForXPLORFlipped(na, nb, nc);
-    out = name + "_cemask_flipped";
+    out = name + "_flipped";
 
     for(int z=0; z<nc; z++){
 
