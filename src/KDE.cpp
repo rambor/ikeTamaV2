@@ -14,7 +14,6 @@
 // limitations under the License.
 //
 //
-
 #include <boost/lexical_cast.hpp>
 #include "KDE.h"
 #include "EulerTour/EulerTour.h"
@@ -234,10 +233,10 @@ bool KDE::checkKDEFile(std::string file) {
 
 bool KDE::createKDE(PointSetModel *pModel) {
 
-    float cutoff = std::sqrt(3.0d/2.0d)*average_dmin*1.02; // midpoint of a tetrahedron
+    float cutoff = std::sqrt(3.0/2.0)*average_dmin*1.02; // midpoint of a tetrahedron
     //grid_spacing = 2.0/3.0*bead_radius; // spacing in rectangular grid for calculating map
     grid_spacing = 2*average_dmin; // spacing in rectangular grid for calculating map
-    bandwidth = grid_spacing*std::sqrt(3.0d); // diagonal of a square 1.73*r
+    bandwidth = grid_spacing*std::sqrt(3.0); // diagonal of a square 1.73*r
 
     const vector3 * pVec = centered_coordinates.data();
     float limit = remapToNewHCPLattice(pModel, cutoff);
@@ -555,7 +554,7 @@ float KDE::remapToNewHCPLatticeSym(PointSetModel * pModel, float cutoff){
     remappedAverage = sumIt/countIt;
     float variance = (float)(squaredSum/countIt - remappedAverage*remappedAverage);
     remappedStDev = std::sqrt(variance);
-    float limit = (float)(remappedAverage - 0.25d*remappedStDev);
+    float limit = (float)(remappedAverage - 0.25*remappedStDev);
 
 
     std::cout << "*******************                                        *******************" << std::endl;
@@ -628,10 +627,10 @@ float KDE::map_refineSym(PointSetModel *pModel, PofRData *pData, std::string out
     printf("  => Z %8.4f %8.4f %8.4f \n", minz, maxz, (maxz-minz));
 
     float cutoff = bead_radius + 0.5f*average_dmin; // sphere of influence, looking for all vectors in centered coordnates that are within...
-    cutoff = std::sqrt(3.0d/2.0d)*bead_radius*1.02;
+    cutoff = std::sqrt(3.0/2.0)*bead_radius*1.02;
 
     grid_spacing = average_dmin; // spacing in rectangular grid for calculating map
-    bandwidth = grid_spacing*std::sqrt(3.0) > (std::sqrt(3.0d/2.0d)*bead_radius) ? std::sqrt(3.0d/2.0d)*bead_radius : grid_spacing*std::sqrt(3.0);
+    bandwidth = grid_spacing*std::sqrt(3.0) > (std::sqrt(3.0/2.0)*bead_radius) ? std::sqrt(3.0/2.0)*bead_radius : grid_spacing*std::sqrt(3.0);
 
 
     unsigned int highTempRounds = 23;
@@ -685,12 +684,12 @@ float KDE::map_refineSym(PointSetModel *pModel, PofRData *pData, std::string out
     // if input refined model is added update probabilites of lattice
     if (priorSet){
         std::cout << "       UPDATING MAP WITH PRIOR : " << prior_name << std::endl;
-        double sum=0.0d;
+        double sum=0.0;
         double alpha = 0.7;
         std::vector<double> temp;
         for(auto & lat : lattice){
 
-            double kernelSum = 0.0d;
+            double kernelSum = 0.0;
             for(unsigned int i=0; i<prior.size(); i++){
                 vector3 lVec = (prior[i] - pModel->getBead(lat.index)->getVec());
                 kernelSum += kernel(lVec.length()/cutoff);
@@ -698,7 +697,7 @@ float KDE::map_refineSym(PointSetModel *pModel, PofRData *pData, std::string out
             sum+=kernelSum;
             temp.emplace_back(kernelSum);
         }
-        double inv = 1.0d/sum;
+        double inv = 1.0/sum;
         for(unsigned int i=0; i<lattice.size(); i++){ // update lattice probabilities
             ProbabilityBead * pPoint = &lattice[i];
             double old = pPoint->prob;
@@ -713,8 +712,8 @@ float KDE::map_refineSym(PointSetModel *pModel, PofRData *pData, std::string out
 
     // create map
     unsigned int totalInLattice = lattice.size();
-    double sumIt=0.0d;
-    double var=0.0d;
+    double sumIt=0.0;
+    double var=0.0;
     for(auto & point : lattice){
         sumIt+=point.prob;
         var += point.prob*point.prob;
@@ -922,7 +921,7 @@ void KDE::generateSeedFromInputFile(PointSetModel *pModel, PofRData *pData, std:
     //cutoff = std::sqrt(3.0d/2.0d)*average_dmin*1.02; // midpoint of a tetrahedron
     //grid_spacing = 2.0/3.0*bead_radius; // spacing in rectangular grid for calculating map
     grid_spacing = average_dmin; // spacing in rectangular grid for calculating map
-    bandwidth = grid_spacing*std::sqrt(3.0d); // diagonal of a square 1.73*r
+    bandwidth = grid_spacing*std::sqrt(3.0); // diagonal of a square 1.73*r
 
     std::string prefix = outname+"_seed";
     logger("REMAPPING TO NEW LATTICE",outname);
@@ -1025,7 +1024,7 @@ float KDE::map_refine(PointSetModel *pModel, PofRData *pData, std::string outnam
     //grid_spacing = 2.0/3.0*bead_radius; // spacing in rectangular grid for calculating map
     grid_spacing = 0.5f*bead_radius;//average_dmin; // spacing in rectangular grid for calculating map
     //bandwidth = (grid_spacing*std::sqrt(3.0) > (std::sqrt(3.0d/2.0d)*bead_radius)) ? std::sqrt(3.0d/2.0d)*bead_radius : grid_spacing*std::sqrt(3.0);
-    bandwidth = (std::sqrt(3.0d/2.0d)*bead_radius);
+    bandwidth = (std::sqrt(3.0/2.0)*bead_radius);
 
     logger("DATA LATTICE SPACING", formatNumber(bead_radius,2));
     logger("CUTOFF", formatNumber(cutoff,3));
@@ -1095,14 +1094,14 @@ float KDE::map_refine(PointSetModel *pModel, PofRData *pData, std::string outnam
 
     if (priorSet){
         logger("UPDATING MAP WITH PRIOR", prior_name);
-        double sum=0.0d;
+        double sum=0.0;
         double alpha = 0.7;
         std::vector<double> temp;
         std::set<unsigned int> indicesToUpdate;
         for(auto & lat : lattice){ //determine which lattice points overlap with prior
 
-            double kernelSum = 0.0d;
-            double minL = 1000.0d;
+            double kernelSum = 0.0;
+            double minL = 1000.0;
             unsigned int indexToUpdate=0;
             for(unsigned int i=0; i<centered_prior.size(); i++){
                 vector3 lVec = (centered_prior[i] - pModel->getBead(lat.index)->getVec());
@@ -1121,7 +1120,7 @@ float KDE::map_refine(PointSetModel *pModel, PofRData *pData, std::string outnam
         }
 
 
-        double inv = 1.0d/sum;
+        double inv = 1.0/sum;
 //        double invC = 1.0d/(double)indicesToUpdate.size();
         for(unsigned int i=0; i<lattice.size(); i++){ // update lattice probabilities
             ProbabilityBead * pPoint = &lattice[i];
@@ -1153,8 +1152,8 @@ float KDE::map_refine(PointSetModel *pModel, PofRData *pData, std::string outnam
      * determine average and variance of the refined lattice
      */
     unsigned int totalInLattice = lattice.size();
-    double sumIt=0.0d;
-    double var=0.0d;
+    double sumIt=0.0;
+    double var=0.0;
     for(auto & point : lattice){
         sumIt += point.prob;
         var +=  point.prob*point.prob;

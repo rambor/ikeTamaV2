@@ -64,19 +64,25 @@ LatticePoint::LatticePoint(int index, int bins) : index(index), bins(bins) {
     }
 }
 
-float LatticePoint::guessAmplitude() {
-    std::uniform_real_distribution<> distribution(0.0,1.0);
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    float prob = distribution(gen);
+/*
+ * should be a random number between 0 and 1
+ */
+float LatticePoint::guessAmplitude(float random_number) const {
+    float sum = probabilities[0];
+    for(int i=1; i<total_amplitudes; i++){ // CDF - cumalative distribution function
+        if (random_number <= sum){
+            return amplitudes[i-1];
+        }
+        sum+=probabilities[i];
+    }
 
-    return CDF(prob);
+    return amplitudes[total_amplitudes-1];
+    //return CDF(random_number);
 }
 
 
 float LatticePoint::CDF(float prob){
     float sum = probabilities[0];
-
     for(int i=1; i<total_amplitudes; i++){ // CDF - cumalative distribution function
         if (prob <= sum){
             return amplitudes[i-1];
@@ -187,8 +193,8 @@ std::string LatticePoint::getDetails(){
     char buffer[80];
 
     tempHeader.append("Probability and Amplitude Details");
-    for(int i=0; i < amplitudes.size(); i++){
-        std::snprintf(buffer, 80, "%5i %.5E %.5E \n", (i+1), amplitudes[i], probabilities[i]);
+    for(std::size_t i=0; i < amplitudes.size(); i++){
+        std::snprintf(buffer, 80, "%5i %.5E %.5E \n", ((int)i+1), amplitudes[i], probabilities[i]);
         tempHeader.append(buffer);
     }
 

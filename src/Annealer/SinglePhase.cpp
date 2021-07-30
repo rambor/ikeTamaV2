@@ -460,7 +460,7 @@ bool Anneal::createInitialModelCVXHull(PointSetModel *pModel, PofRData *pData, s
         std::cout << "            ZERO BIN AT : " << pData->getZeroBin() << std::endl;
     }
 
-//    pData->printICalc(binCount);
+//    pData->writeICalc(binCount);
     std::cout << " EXITING INITIAL MODEL BUILD => " << currentNumberOfComponents << std::endl;
     float tempAverageContacts=0.0;
     for (unsigned int i=0; i<workingLimit; i++){

@@ -18,9 +18,7 @@
 //
 
 
-#include <random>
-#include <sastools/include/Datum.h>
-#include <Eigen/Core>
+
 #include "DensityMapper.h"
 
 
@@ -69,14 +67,14 @@ DensityMapper::DensityMapper(std::string filename, float qmax, float sampling_fr
 
     fwhm_sigma = 1.5f*cutoff/2.355f; //1.2f*cutoff/2.355f; // using the formula fwhm = 2.355*sigma which should account for 76% area in distribution
 
-    printf("%34s :: %.2f\n", "dmin SUPREMUM", dmin_supremum);
-    printf("%34s :: %.2f\n", "dmin INFINUM", dmin_infimum);
-    printf("%34s :: %.2f\n", "dmin AVERAGE", average_dmin);
-    printf("%34s :: %.2f\n", "dmin STDEV", stdev_dmin);
-    printf("%34s :: %.2f\n", "sampling freq", sampling_frequency);
-    printf("%34s :: %.2f\n", "delta r", delta_r);
-    printf("%34s :: %.2f\n", "cutoff", cutoff);
-    printf("%34s :: %.2f\n", "FWHM", fwhm_sigma);
+    logger("dmin SUPREMUM", formatNumber(dmin_supremum,2));
+    logger("dmin INFINUM", formatNumber(dmin_infimum, 2));
+    logger("dmin AVERAGE", formatNumber(average_dmin, 2));
+    logger("dmin STDEV", formatNumber(stdev_dmin, 3));
+    logger("sampling freq", formatNumber(sampling_frequency, 2));
+    logger("delta r", formatNumber(delta_r, 3));
+    logger("cutoff", formatNumber(cutoff, 2));
+    logger("FWHM", formatNumber(fwhm_sigma, 2));
 
     amplitudes.resize(total_centered_coordinates);
     for(auto & amp : amplitudes){
@@ -99,37 +97,37 @@ DensityMapper::DensityMapper(std::string filename, float qmax, float sampling_fr
      * dispatch library manages the multiple runtimes that might be available on the computer (Intel CPU with NVIDIA GPU)
      *
      */
-    cl_uint platformIdCount = 0;
-    clGetPlatformIDs (0, nullptr, &platformIdCount);
-
-    std::vector<cl_platform_id> platformIds (platformIdCount);
-    clGetPlatformIDs (platformIdCount, platformIds.data (), nullptr);
-
-    cl_uint deviceIdCount = 0;
-    clGetDeviceIDs (platformIds [0], CL_DEVICE_TYPE_ALL, 0, nullptr,
-                    &deviceIdCount);
-
-    std::vector<cl_device_id> deviceIds (deviceIdCount);
-    clGetDeviceIDs (platformIds [0], CL_DEVICE_TYPE_ALL, deviceIdCount,
-                    deviceIds.data (), nullptr);
-
-
-    std::cout <<" " << std::endl;
-    logger("Total OpenCL Platforms", formatNumber(platformIdCount));
+//    cl_uint platformIdCount = 0;
+//    clGetPlatformIDs (0, nullptr, &platformIdCount);
+//
+//    std::vector<cl_platform_id> platformIds (platformIdCount);
+//    clGetPlatformIDs (platformIdCount, platformIds.data (), nullptr);
+//
+//    cl_uint deviceIdCount = 0;
+//    clGetDeviceIDs (platformIds [0], CL_DEVICE_TYPE_ALL, 0, nullptr,
+//                    &deviceIdCount);
+//
+//    std::vector<cl_device_id> deviceIds (deviceIdCount);
+//    clGetDeviceIDs (platformIds [0], CL_DEVICE_TYPE_ALL, deviceIdCount,
+//                    deviceIds.data (), nullptr);
+//
+//
+//    std::cout <<" " << std::endl;
+//    logger("Total OpenCL Platforms", formatNumber(platformIdCount));
     /*
      * device[0] is CPU
      * device[1] is likely GPU
      */
 
 
-    clGetDeviceIDs (platformIds[0], CL_DEVICE_TYPE_ALL, 0, nullptr,
-                    &deviceIdCount);
-
-    if (deviceIdCount <2){
-        exit(1);
-    } else {
-
-    }
+//    clGetDeviceIDs (platformIds[0], CL_DEVICE_TYPE_ALL, 0, nullptr,
+//                    &deviceIdCount);
+//
+//    if (deviceIdCount <2){
+//        exit(1);
+//    } else {
+//
+//    }
 
 
 //    const cl_context_properties contextProperties [] = {
@@ -144,8 +142,8 @@ DensityMapper::DensityMapper(std::string filename, float qmax, float sampling_fr
 //            nullptr, &error);
 //
 
-    char *profile = NULL;
-    size_t size;
+//    char *profile = NULL;
+//    size_t size;
 
 //    for(unsigned int i=0; i<platformIdCount; i++){
 //        clGetDeviceIDs (platformIds[i], CL_DEVICE_TYPE_ALL, 0, nullptr,
@@ -164,9 +162,7 @@ DensityMapper::DensityMapper(std::string filename, float qmax, float sampling_fr
 //        logger("Total Devices", formatNumber(deviceIdCount));
 //    }
 
-
     //set GPU
-
 
     createSphericalFibonacciLattice();
     setModel();
@@ -208,9 +204,9 @@ void DensityMapper::setModel(){
 
 void DensityMapper::calculateDensityCoefficientAtLMR(){
     // for each point in shell, calculate integral of
-    for(auto & shell : shells){
-        shell.updateDensityCoefficients(centered_coordinates, amplitudes, fwhm_sigma);
-    }
+//    for(auto & shell : shells){
+//        shell.updateDensityCoefficients(centered_coordinates, amplitudes, fwhm_sigma);
+//    }
 }
 
 
@@ -230,87 +226,13 @@ float DensityMapper::calculateIntensityAtQ(int q_index){
     return intensity;
 }
 
-/*
- * if parallelizing each thread will need a separate copy of neighboords and debye_factors
- *
- */
-float DensityMapper::calculateIntensityAtQHCPGrid(int q_index, std::vector<float> & squared_ampliltudes){
-    float intensity = 0.0, intensity2=0.0;
-
-    unsigned int totalHCPInUse = keptHCPLatticePoints.size(); // shared memory
-    unsigned int locale = q_index*(totalHCPInUse*(totalHCPInUse-1)/2+totalHCPInUse);
-//    float amplitude_r_i, amplitude_r_j;
-    /*
-     * OPENMP
-     * need copies of densities and debye factors ?
-     */
-//    omp_set_dynamic(0);     // Explicitly disable dynamic teams
-//    #pragma omp parallel num_threads(4) shared(locale, totalHCPInUse, intensity, intensity2, densities, debye_factors)
-//    {
-//        float amplitude_r_i;
-//        const float * const pDebye = debye_factors.data(); // shared memory
-//        std::vector<float> dens = densities;
-//        const float * const pDen = dens.data();
-//        float temp_intensity = 0.0;
-//        float temp_intensity2 = 0.0;
-//
-//        #pragma omp for
-//        for(int i=0; i<totalHCPInUse; i++){
-//            /*
-//             * order off keptHCPLatticePoints tracks with neighborhoods
-//             */
-//            // calculate electron density amplitude based on neighborhood
-//            amplitude_r_i = pDen[i]; // read the array
-//            temp_intensity += amplitude_r_i*amplitude_r_i;
-//
-//            int ni = locale + i*totalHCPInUse - (i*(i-1)/2);
-//            for(int j=(i+1); j<totalHCPInUse; j++){
-//                // calculate amplitude based on neighborhood
-//                temp_intensity2 += amplitude_r_i*pDen[j]*pDebye[ni + (j - i)];
-//            }
-//        }
-//#pragma omp atomic
-//        intensity2 += temp_intensity2;
-//
-//#pragma omp atomic
-//        intensity += temp_intensity;
-//    }
-
-//    float intensitytt = 0.0, intensity2tt=0.0;
-//    float amplitude_r_i;
-    const float * const pDebye = debye_factors.data(); // shared memory
-    const float * const pAmp = squared_ampliltudes.data();
-    int ni;
-    unsigned int indexer=0;
-    for(int i=0; i<totalHCPInUse; i++){
-        /*
-         * order off keptHCPLatticePoints tracks with neighborhoods
-         * calculate electron density amplitude based on neighborhood
-         */
-        //amplitude_r_i = pAmp[indexer]; // read the array
-        intensity += pAmp[indexer];//*amplitude_r_i;
-        indexer++;
-        ni = locale + i*totalHCPInUse - (i*(i-1)/2);
-        for(int j=(i+1); j<totalHCPInUse; j++){
-            // calculate amplitude based on neighborhood
-            //indexit = ni + (j - i);
-            //amplitude_r_j = pDen[j];
-            // get debye factor for i,j
-            intensity2 += pAmp[indexer]*pDebye[ni + (j - i)];
-            indexer++;
-            //intensity2 += amplitude_r_i*pAmp[j]*pDebye[ni + (j - i)];
-        }
-    }
-//    std::cout << intensity << " " << intensitytt << " :: " << intensity2 << " " << intensity2tt << std::endl;
-    return intensity + 2*intensity2;
-}
 
 
 /*
  * calculate electron density value at each point in the keptHCPlattice points (sampling lattice)
  *
  */
-float DensityMapper::populateDensities(std::vector<float> & amplitudesT, std::vector<float> & densities_at_HCP, std::vector<float> & squared_amplitudes){
+float DensityMapper::populateDensities(std::vector<float> & amplitudesT, std::vector<float> & densities_at_HCP, float * squared_amplitudes){
     unsigned int totalHCPInUse = keptHCPLatticePoints.size();
 
     const float * const pAmp = amplitudesT.data(); // base amplitude for input MODEL
@@ -318,11 +240,11 @@ float DensityMapper::populateDensities(std::vector<float> & amplitudesT, std::ve
 
     Neighbors * const  pNeighborhood = neighborhoods.data();
 
-    int totalNeighbors;
+    unsigned int totalNeighbors;
     float amplitude_r_i;
     float sum = 0.0;
 
-    for(int i=0; i<totalHCPInUse; i++){
+    for(unsigned int i=0; i<totalHCPInUse; i++){
         // calculate electron density amplitude based on neighborhood
         auto & neighborhood_i = pNeighborhood[i];
         const float * model_kernel_distances = neighborhood_i.getModelDistances();
@@ -345,18 +267,18 @@ float DensityMapper::populateDensities(std::vector<float> & amplitudesT, std::ve
      */
     float amp1;
     unsigned int indexer =0;
-    float * const pSq = squared_amplitudes.data();
+//    float * const pSq = squared_amplitudes.data();
     for(unsigned int i=0; i<totalHCPInUse; i++){
         amp1 = pDen[i];
         //ni = i*totalHCPInUse - (i*(i-1)/2);
         //std::cout << indexer << " " << ni << std::endl;
         for(unsigned int j=i; j<totalHCPInUse; j++){
 //            squared_amplitudes[ni + (j-i)] = amp1*pDen[j];
-            pSq[indexer] = amp1*pDen[j];
+//            pSq[indexer] = amp1*pDen[j];
+            squared_amplitudes[indexer] = amp1*pDen[j];
             indexer++;
         }
     }
-
 
     return sum/(float)totalHCPInUse;
 }
@@ -364,7 +286,7 @@ float DensityMapper::populateDensities(std::vector<float> & amplitudesT, std::ve
 float DensityMapper::calculateAmplitudeAtQ(int q_index, int l_index, int m_index){
     // for each point in shell, calculate integral of
     float r_k, bessel_r_k2;
-    int base = qvalues_size*rvalues.size();
+    unsigned int base = qvalues_size*rvalues.size();
     float sum_real = 0.0;
     float sum_imag = 0.0;
 
@@ -373,7 +295,7 @@ float DensityMapper::calculateAmplitudeAtQ(int q_index, int l_index, int m_index
     /*
      * Need to perform Hankel transform
      */
-    int bessel_start = base*l_index + q_index*rvalues.size();
+    unsigned int bessel_start = base*l_index + q_index*rvalues.size();
 
     for(auto & shell : shells){
         r_k = shell.getRadius();
@@ -444,12 +366,16 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
     /*
      *
      */
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> distribution(0.0,1.0);
+
     std::clock_t startTime;
     double runtime;
 
-    unsigned int topN = (unsigned int)(std::ceil(models_per_round*topPercent));
+    auto topN = (unsigned int)(std::ceil((float)models_per_round*topPercent));
 
-    int total_amplitudes = lattice_points.size();
+    auto total_amplitudes = lattice_points.size();
     std::vector<float> prior_model_amplitudes(total_amplitudes);
     amplitudes.resize(total_amplitudes);
     float * const pAmp = amplitudes.data();
@@ -478,38 +404,51 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
     std::vector<float> residuals(total_residuals);
     float * const pRes = residuals.data();
 
+    int updater = models_per_round/3;
     float * const pICalc = i_calc.data();
     float * const pSigma = sigmas_squared.data();
+    const LatticePoint * pLattice = lattice_points.data();
+
     float chi2, scale, ave;
 
     //this->setBessels(qvalues);
     this->createHCPGrid(); //
     std::vector<float> hcp_electron_densities(keptHCPLatticePoints.size());
-    std::vector<float> squared_amplitudes(keptHCPLatticePoints.size()*(keptHCPLatticePoints.size()-1)/2 + keptHCPLatticePoints.size());
-
+    // use aligned memory for squared amplitudes and debye_factors
+    //std::vector<float> squared_amplitudes(keptHCPLatticePoints.size()*(keptHCPLatticePoints.size()-1)/2 + keptHCPLatticePoints.size());
+    auto * squared_amplitudes = (float *)_aligned_malloc(sizeof(float)*(keptHCPLatticePoints.size()*(keptHCPLatticePoints.size()-1)/2 + keptHCPLatticePoints.size()), 16);
     this->setDebyeFactors(workingSet);
     //this->setYlms();
 
-    float alpha = 10, dw;
+    float alpha = 10.0f, dw;
     logger("STARTING", "REFINEMENT");
+    logger("Total Trials per Round", formatNumber((unsigned)models_per_round));
+    logger("10000 models at 0.01 per trial", formatNumber(10000*0.01/60, 2) + " minutes");
+    logger("50000 models at 0.01 per trial", formatNumber(50000*0.01/60, 2) + " minutes");
+    logger("UPDATE", "EACH ROUND ~ 2 to 10 minutes");
 
     for(int round=0; round<max_rounds; round++){
         unsigned int topAdded=0;
 
         startTime = std::clock();
-
         // should be parallelized
-        for(int m=0; m<models_per_round; m++){
+        for(int model=1; model<models_per_round; model++){
             // populate amplitudes
+            float * const pPriors = prior_model_amplitudes.data();
             for(int i=0; i<total_amplitudes; i++){
-                prior_model_amplitudes[i] = lattice_points[i].guessAmplitude();
+                pPriors[i] = pLattice[i].guessAmplitude(distribution(gen));
             }
 
 //            for(auto & shell : shells){
 //                shell.updateDensityCoefficients(centered_coordinates, prior_density_amplitudes, fwhm_sigma);
 //            }
 
+            //takes less than 100 usec
+            //startTime = std::clock();
             ave = populateDensities(prior_model_amplitudes, hcp_electron_densities, squared_amplitudes);
+//            runtime = (std::clock() - startTime)/(double) CLOCKS_PER_SEC;
+//            logger("populateDensities TIME", formatNumber((float)runtime,8));
+
             /*
              * score the quality of the model
              * any densities isolated?
@@ -528,10 +467,11 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
 //            runtime = (std::clock() - startTime)/(double) CLOCKS_PER_SEC;
 //            logger("ICALC TIME", formatNumber((float)runtime,8));
 
+//            startTime = std::clock();
+            //takes less than 100 usec
             scale = calculateScaleFactor(total_data, pICalc, pSigma, pWorkingSet);
             chi2 = getChiSquare(total_data, scale, pICalc, pSigma, pWorkingSet, trial_residuals.data());
-            chi2 += alpha*(ave - 0.4)*(ave - 0.4);
-
+            chi2 += alpha*(ave - 0.4f)*(ave - 0.4f);
             // update topN
             if (topAdded < topN){
                 Trial * pTrial = &topTrials[topAdded];
@@ -563,8 +503,9 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
                     std::sort(topTrials.begin(), topTrials.end());
                 }
             }
+//            runtime = (std::clock() - startTime)/(double) CLOCKS_PER_SEC;
+//            logger("Trial TIME", formatNumber((float)runtime,8));
         }
-
         //update probability model
         /*
          * for each bead in topN, count occurrences
@@ -595,9 +536,11 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
         runtime = (std::clock() - startTime)/(double) CLOCKS_PER_SEC;
         std::cout << "==================== ROUND :: " << round << std::endl;
         logger("alpha", formatNumber(alpha,6));
-        logger("ROUND TIME", formatNumber((float)runtime,6));
+        logger("ROUND TIME", formatNumber((float)runtime/60.0f,2) + " minutes ");
         logger("CHI2 TOP BEST", formatNumber((float)topTrials[0].value, 4));
         logger("CHI2 TOP LAST", formatNumber((float)topTrials[last].value, 4));
+
+        float timeremaining = ((float)runtime*(float)(max_rounds - round)/60.0f);
 
         // update amplitudes with best
         float * pDens = topTrials[0].model_amplitudes.data();
@@ -605,21 +548,22 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
         for(int i=0; i<lattice_points.size(); i++){
             pAmp[i] = pDens[i];
         }
-        startTime = std::clock();
+
         this->createXPLORMap("best_"+std::to_string(round));
 
         ave = populateDensities(amplitudes, hcp_electron_densities, squared_amplitudes);
         populateICalc(total_data, i_calc, squared_amplitudes);
         scale = topTrials[0].scale;
-        printICalc(total_data, scale, pICalc, pWorkingSet, "best_"+std::to_string(round));
+        writeICalc(total_data, scale, pICalc, pWorkingSet, "best_" + std::to_string(round));
 
         dw = calculateDurbinWatson(total_residuals, residuals.data());
         logger("DurbinWatson", formatNumber(dw, 5));
+        logger("EST TIME REMAINING", formatNumber(timeremaining, 2) + " minutes");
+        std::cout << " " << std::endl;
         if (topTrials[0].value < 0.01 && topTrials[last].value < 0.063){
             break;
         }
-            runtime = (std::clock() - startTime)/(double) CLOCKS_PER_SEC;
-            logger("MAP TIME", formatNumber((float)runtime,8));
+
         if (round > 1){
             alpha *= 0.1;
         }
@@ -630,17 +574,20 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
         pAmp[i] = lattice_points[i].getWeightedAmplitude();
     }
 
+    logger("TOTAL MODELS IN FINAL", formatNumber(topN) + " models");
+
     populateDensities(amplitudes, hcp_electron_densities, squared_amplitudes);
     populateICalc(total_data, i_calc, squared_amplitudes);
 
     scale = calculateScaleFactor(total_data, pICalc, pSigma, pWorkingSet);
     chi2 = getChiSquare(total_data, scale, pICalc, pSigma, pWorkingSet, trial_residuals.data());
-    printICalc(total_data, scale, pICalc, pWorkingSet, "final_weighted");
+    writeICalc(total_data, scale, pICalc, pWorkingSet, "final_weighted");
 
     std::cout << "FINAL CHI2 " << chi2 << std::endl;
     this->createXPLORMap("final_weighted");
 
-
+    _aligned_free(squared_amplitudes);
+    _aligned_free(debye_factors);
 //    for(int i=0; i<lattice_points.size(); i++){
 //        pAmp[i] = lattice_points[i].getMostProbableAmplitude();
 //    }
@@ -869,7 +816,7 @@ void DensityMapper::createXPLORMap(std::string name){
 
     float average = (mapSumSquared/mapCount);
     float stdev = std::sqrt(mapSumSquared/mapCount - ave*ave);
-    float aboveit = average + 1.8f*stdev;
+    float aboveit = average + 2.2f*stdev;
     float belowit = average + 3.0f*stdev;
 
     int index = 1;
@@ -927,7 +874,7 @@ void DensityMapper::createHCPGrid(){
 
     double phi_calc;
     float ncoount;
-    std::string tempHeader = "";
+    std::string tempHeader;
     char buffer[80];
 
     // for each bead, get all atoms that overlap
@@ -947,7 +894,7 @@ void DensityMapper::createHCPGrid(){
         rvalues.push_back(bead_vec.length());
 
         // for SHE (spherical coordinates)
-        phi_calc = (bead_vec.x == 0 || bead_vec.x == 0.0d) ? 0.0d : atan2(bead_vec.y,bead_vec.x);
+        phi_calc = (bead_vec.x == 0 || bead_vec.x == 0.0) ? 0.0 : atan2(bead_vec.y,bead_vec.x);
         phis.push_back(phi_calc);
         cos_thetas.push_back( cos(acos(bead_vec.z/bead_vec.length())) );
 
@@ -982,69 +929,6 @@ void DensityMapper::createHCPGrid(){
     FILE * pFile = fopen(outputFileName, "w");
     fprintf(pFile, tempHeader.c_str());
     fclose(pFile);
-}
-
-/*
- * must only be performed after setting HCP lattice and
- *
- */
-void DensityMapper::setYlms(){
-
-    int numAtoms = rvalues.size();
-
-    int plmSize = ((lmax+1)*(lmax+2))/2 + 1; // (lmax+1)*(lmax+2)/2, add one to componsate fo
-    std::vector<double> plm((unsigned long)plmSize);
-    std::vector<double> plm_values((unsigned long)(numAtoms*(plmSize-1)));
-
-    double * const ptrPLM = plm_values.data();
-    double costheta;
-    int csphase = -1, cnorm = 1;
-    unsigned int plmCount=0;
-    /*
-     * Spherical harmonics are the product of the associated Legendre polynomial (cos(theta) and imaginary term at m*phi
-     */
-    for(int i=0; i < numAtoms; i++){ // go over coordinates of all the atoms and calculate plmbar
-        // 2-D array, for each atom calculate
-        costheta = cos_thetas[i];
-        // PLMBAR starts indexing from 1 and not 0 (Fortran vs C++)
-        plmbar_(&plm[0], &lmax, &costheta, &csphase, &cnorm); //FORTRAN SHTOOLS SHE
-        for (int j=1; j < plmSize; j++){
-            ptrPLM[plmCount] = (float)plm[j];
-            plmCount++;
-        }
-    }
-
-    ylm_size = (lmax+1)*(lmax+1)*numAtoms;
-    y_lm_real.resize((unsigned long)ylm_size);
-    y_lm_imag.resize((unsigned long)ylm_size);
-
-    double phiValue;
-    double factor = 0.5 * (sqrt(1.0/M_PI));
-    double result, sinp, cosp;
-    double * const ptrR = y_lm_real.data();
-    double * const ptrI = y_lm_imag.data();
-
-    unsigned int index_lm = 0;
-
-    for(int l=0; l <= lmax; l++) { // for a water, calculate bessel's, y_lm's and w_q (scattering factor)
-
-        for(int m=-l; m <= l; m++) { //assemble sphherical harmonics at constant l,m for all atoms
-
-            int lm_index = (l*(l+1))/2 + abs(m);
-
-            for (int i=0 ; i < numAtoms; i++) { // can't assume numAtoms is even
-                // includes negative angles for m < 0
-                phiValue = (m*phis[i]);
-                result = ptrPLM[(i*(plmSize-1) + lm_index)] * factor;
-                __sincos(phiValue, &sinp, &cosp);
-                ptrR[ index_lm ] = (cosp * result);
-                ptrI[ index_lm ] = (sinp * result);
-                index_lm++;
-            }
-        }
-    }
-
-    logger("Total YLMs", formatNumber((unsigned int)ylm_size));
 }
 
 
@@ -1239,12 +1123,19 @@ void DensityMapper::setDebyeFactors(std::vector<Datum> &workingSet) {
 
     // populate debye factors
 
+
+    unsigned int long size_of_dbf = (totalKept*(totalKept-1)/2 + totalKept)*workingSet.size();
+    debye_factors = (float *)_aligned_malloc(sizeof(float)*size_of_dbf, 16); // 16 byte aligned
+
+    unsigned int long counter = 0;
     for(auto & data : workingSet){
 
         float q_value = data.getQ();
         unsigned int indexer = 0;
         for (int i=0; i<totalKept; i++){
-            debye_factors.push_back(1.0f);
+            debye_factors[counter] = 1.0f;
+            counter++;
+//            debye_factors.push_back(1.0f);
 //            int next = i*(i-1)/2;
             indexer++;
             for (int j=(i+1); j<totalKept; j++){
@@ -1252,22 +1143,24 @@ void DensityMapper::setDebyeFactors(std::vector<Datum> &workingSet) {
 //                qr = q_value*distances[next];
                 qr = q_value*distances[indexer];
                 indexer++;
-                debye_factors.push_back(sinf(qr)/qr);
+                //debye_factors.push_back(sinf(qr)/qr);
+                debye_factors[counter] = sinf(qr)/qr;
+                counter++;
             }
         }
     }
-
 }
 
-void DensityMapper::populateICalc(unsigned int total_q, std::vector<float> & iCalc, std::vector<float> & squared_amplitudes) {
+void DensityMapper::populateICalc(unsigned int total_q, std::vector<float> & iCalc, float * squared_amplitudes) {
 
     unsigned int totalHCPInUse = keptHCPLatticePoints.size(); // shared memory
-    const float * const pAmp = &squared_amplitudes.front();
-    const float * const pDebye = &debye_factors.front(); // shared memory
+//    const float * const pAmp = &squared_amplitudes.front();
+    const float * const pDebye = &debye_factors[0];//.front(); // shared memory
+//    const simde_float32 * const pDebye = &debye_factors.front(); // shared memory
 
     float intensity_r_at_zero=0.0f;
     for (int i = 0; i < totalHCPInUse; i++) { // calculate diagonal term of Debye matrix
-        intensity_r_at_zero += pAmp[ i*totalHCPInUse - (i*(i-1)/2)];// pDebye is 1 for self-amplitude squared
+        intensity_r_at_zero += squared_amplitudes[ i*totalHCPInUse - (i*(i-1)/2)];// pDebye is 1 for self-amplitude squared
     }
 
     const unsigned int total_width = totalHCPInUse*(totalHCPInUse-1)/2+totalHCPInUse;
@@ -1276,86 +1169,64 @@ void DensityMapper::populateICalc(unsigned int total_q, std::vector<float> & iCa
     unsigned int locale;
 
     float * pICalc = iCalc.data();
-//        for (unsigned int q_index = 0; q_index < total_q; q_index++) {
-//            //pICalc[i] = this->calculateIntensityAtQHCPGrid(i, squared_amplitudes);
-//            intensity2 = 0.0;
-//            locale = q_index * total_width;
-//            // for each q-value calculate intensity over squared amplitudes
-/*
- * GPU should multiply and sum
- */
-//            for (unsigned int i=0; i<total_width; i++ ){ // SSE intrinsic here would multiple and then sum
-//                //intensity2 += pAmp[i]*pDebye[locale+i];
-//                intensity2 += *(pAmp+i)* *(pDebye + locale + i);
-//            } // 0.000209 seconds for total_width = 170820
-//
-//            // so much overhead here
-//            //pICalc[q_index] = intensity_r_at_zero + 2*(intensity2-intensity_r_at_zero);
-//            //*(pICalc + q_index) = intensity_r_at_zero + 2*(intensity2-intensity_r_at_zero);
-//            *(pICalc) = intensity_r_at_zero + 2*(intensity2-intensity_r_at_zero);
-//            ++pICalc;
-//        }
-//    pICalc = iCalc.data();
-
-    unsigned int window = 16, next_i;
+    unsigned int window = 8, next_i;
     auto end_N = (unsigned int)std::floor(total_width/window);
     unsigned int start_of_tail = end_N*window;
 
+    simde__m128 mmSum, v0, v1, v2, v3, s01, s23;
+//    simde__m256 mmSum; // vector of 8 floating point numbers
 
-//    wall0 = omp_get_wtime();
-//    __m128 mmSum; // vector of 4 floating point numbers - should be 16 bit
-    __m256 mmSum; // vector of 8 floating point numbers
+    float icalc_sse[4];
 
-    float icalc_sse[8];
-
-    for(unsigned int q_index ; q_index < total_q; q_index++) {
+    for(unsigned int q_index = 0; q_index < total_q; q_index++) {
 
         locale = q_index * total_width;
-
-//        mmSum = _mm_setzero_ps();
-        mmSum = _mm256_setzero_ps();
-
+//        mmSum = simde_mm256_setzero_ps();
+        mmSum = simde_mm_setzero_ps();
 
         for (unsigned int i=0; i < start_of_tail; i+=window ){ // SSE intrinsic here would multiply and then sum
             next_i = locale + i;
-//            __m128 v0 = _mm_loadu_ps(pAmp + i + 0);
-//            __m128 v1 = _mm_loadu_ps(pDebye + next_i + 0);
-//            __m128 s01 = _mm_mul_ps(v0, v1);
-//
-//            __m128 v2 = _mm_loadu_ps(pAmp + i + 4);
-//            __m128 v3 = _mm_loadu_ps(pDebye + next_i  + 4);
-//            __m128 s23 = _mm_mul_ps(v2, v3);
-//
-//            mmSum = _mm_add_ps(mmSum, s01);
-//            mmSum = _mm_add_ps(mmSum, s23);
+            //_m128 is four floating point numbers (4x32 = 128 bits) => 16 bytes total
+            // one byte is equivalent to eight bits
+//            v0 = simde_mm_loadu_ps(pAmp + i + 0); // loading 4 floats at a time
+//            v1 = simde_mm_loadu_ps(pDebye + next_i + 0);
+            v0 = simde_mm_load_ps(&squared_amplitudes[i]); // loading 4 floats at a time or 16 bytes total
+            v1 = simde_mm_load_ps(&debye_factors[next_i]);
+            s01 = simde_mm_mul_ps(v0,v1);
+            mmSum = simde_mm_add_ps(mmSum, s01);
+
+            //v2 = simde_mm_loadu_ps(pAmp + i + 4); // loading next 4 floats for total 8 per cycle
+            //v3 = simde_mm_loadu_ps(pDebye + next_i  + 4);
+            v2 = simde_mm_load_ps(&squared_amplitudes[i + 4]); // loading next 4 floats for total 8 per cycle
+            v3 = simde_mm_load_ps(&debye_factors[next_i  + 4]);
+            s23 = simde_mm_mul_ps(v2,v3);
+            mmSum = simde_mm_add_ps(mmSum, s23);
 
             // unroll 2-times in windows of 8 long for _m256
-            __m256 v0 = _mm256_loadu_ps(pAmp + i + 0);
-            __m256 v1 = _mm256_loadu_ps(pDebye + next_i + 0);
-            __m256 s01 = _mm256_mul_ps(v0, v1);
-            mmSum = _mm256_add_ps(mmSum, s01);
-
-            __m256 v2 = _mm256_loadu_ps(pAmp + i + 8);
-            __m256 v3 = _mm256_loadu_ps(pDebye + next_i  + 8);
-            __m256 s23 = _mm256_mul_ps(v2, v3);
-            mmSum = _mm256_add_ps(mmSum, s23);
-            //intensity2 += *(pAmp+i)* *(pDebye + locale + i);
+//            simde__m256 v0 = simde_mm256_loadu_ps(pAmp + i + 0);
+//            simde__m256 v1 = simde_mm256_loadu_ps(pDebye + next_i + 0);
+//            simde__m256 s01 = simde_mm256_mul_ps(v0, v1);
+//            mmSum = simde_mm256_add_ps(mmSum, s01);
+//
+//            simde__m256 v2 = simde_mm256_loadu_ps(pAmp + i + 8);
+//            simde__m256 v3 = simde_mm256_loadu_ps(pDebye + next_i  + 8);
+//            simde__m256 s23 = simde_mm256_mul_ps(v2, v3);
+//            mmSum = simde_mm256_add_ps(mmSum, s23);
         }
 
-        //_mm_store_ps(icalc_sse, mmSum);
-        _mm256_store_ps(icalc_sse, mmSum);
-        intensity2=icalc_sse[0] + icalc_sse[1] + icalc_sse[2] + icalc_sse[3] + icalc_sse[4] + icalc_sse[5] + icalc_sse[6] + icalc_sse[7];
+        simde_mm_store_ps(icalc_sse, mmSum);
+//        simde_mm256_store_ps(icalc_sse, mmSum);
+        intensity2=icalc_sse[0] + icalc_sse[1] + icalc_sse[2] + icalc_sse[3];// + icalc_sse[4] + icalc_sse[5] + icalc_sse[6] + icalc_sse[7];
 
+        // add remaining bits since we can't do in full width of 8
         for (unsigned int i=start_of_tail; i < total_width; i++ ){ // SSE intrinsic here would multiple and then sum
-            intensity2 += *(pAmp+i)* *(pDebye + locale + i);
+            //intensity2 += *(pAmp+i)* *(pDebye + locale + i);
+            intensity2 += squared_amplitudes[i] * debye_factors[locale + i];
         }
 
         *(pICalc) = intensity_r_at_zero + 2*(intensity2 - intensity_r_at_zero);
         ++pICalc;
-//        std::cout << q_index << " " << pICalc[q_index] << " == " <<  (intensity_r_at_zero + 2*(intensity2 - intensity_r_at_zero)) << std::endl;
     }
-//    wall1 = omp_get_wtime();
-//    std::cout << " elapsed time= " << wall1 - wall0 << " s" << total_width << " TOTAL " << (total_with_q) << std::endl;
 }
 
 float DensityMapper::calculateScaleFactor(unsigned int total, float * const pICalc, float * const pSigma, Datum * const pWorkingSet) {
@@ -1393,7 +1264,7 @@ float DensityMapper::getChiSquare(unsigned int total, float scale, float * const
 }
 
 
-void DensityMapper::printICalc(unsigned int total, float scale, float * const pICalc, Datum * const pWorkingSet, std::string name){
+void DensityMapper::writeICalc(unsigned int total, float scale, float * const pICalc, Datum * const pWorkingSet, std::string name){
 
     std::string tempHeader = "";
     char buffer[80];

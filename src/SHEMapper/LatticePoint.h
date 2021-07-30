@@ -42,7 +42,7 @@ public:
 
     void addToCounter(float value);
 
-    float guessAmplitude();
+    float guessAmplitude(float rnd_number) const;
 
     void resetCounter();
 

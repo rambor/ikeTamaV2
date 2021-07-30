@@ -21,7 +21,13 @@
 #define IKETAMA_DENSITYMAPPER_H
 
 #include <math.h>
-#include <immintrin.h>
+#include <random>
+#include <sastools/include/Datum.h>
+#include <Eigen/Core>
+#include <sastools/include/simde-no-tests-master/simde-arch.h>
+#include <sastools/include/simde-no-tests-master/simde-common.h>
+#include <sastools/include/simde-no-tests-master/x86/avx.h>
+//#include <immintrin.h>
 
 #ifdef __APPLE__ //Mac OSX has a different name for the header file
     #include <OpenCL/opencl.h>
@@ -40,6 +46,7 @@
 #include <iostream>
 #include <sastools/include/PDBModel.h>
 #include <sastools/include/utils.h>
+#include <cstdlib>
 
 // #include <boost/math/special_functions/spherical_harmonic.hpp
 
@@ -79,7 +86,9 @@ class DensityMapper {
     std::vector<double> y_lm_imag;
 
     std::vector<Neighbors> neighborhoods;
-    std::vector<float> debye_factors;
+    //std::vector<float> debye_factors;
+    float * debye_factors;
+    //aligned_vector debye_factors;
 
     PointSetModel modelDensityHCP;
 
@@ -148,21 +157,18 @@ public:
 
     void createHCPGrid();
 
-    void setYlms();
-
     void setDebyeFactors( std::vector<Datum> & workingSet);
-    float calculateIntensityAtQHCPGrid(int q_index, std::vector<float> & densities);
 
-    void populateICalc(unsigned int total, std::vector<float> & pICalc, std::vector<float> & hcp_densities);
+    void populateICalc(unsigned int total, std::vector<float> & pICalc, float * squared_amplitudes);
 
-    float populateDensities(std::vector<float> &amplitudesT, std::vector<float> &densities, std::vector<float> & squared_amplitudes);
+    float populateDensities(std::vector<float> &amplitudesT, std::vector<float> &densities, float * squared_amplitudes);
 
     float calculateScaleFactor(unsigned int total, float *const pICalc, float *const pSigma, Datum *const pWorkingSet);
 
     float getChiSquare(unsigned int total, float scale, float *const pICalc, float *const pSigma,
                        Datum *const pWorkingSet, float * const res);
 
-    void printICalc(unsigned int total, float scale, float *const pICalc, Datum *const pWorkingSet, std::string name);
+    void writeICalc(unsigned int total, float scale, float *const pICalc, Datum *const pWorkingSet, std::string name);
 
     float calculateDurbinWatson(unsigned int total, float * const residuals);
 

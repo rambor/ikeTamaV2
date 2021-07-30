@@ -18,7 +18,7 @@
 //
 
 
-#include <set>
+
 #include "Shell.h"
 
 Shell::Shell(float radius, float area_per_point): radius(radius), area_per_point(area_per_point) {
@@ -47,7 +47,7 @@ void Shell::createShell() {
 
         shell_vec = &points[j];
         double theta = j*inv_golden_ratio;
-        double phi = acos(1.0d - 2.0d*(j+epsilon)/(total_coordinates_in_shell - 1 + 2.0d*epsilon));
+        double phi = acos(1.0 - 2.0*(j+epsilon)/(total_coordinates_in_shell - 1 + 2.0*epsilon));
 
         double sin_phi = sin(phi);
         shell_vec->x = radius*(float)(cos(theta)*sin_phi);
@@ -55,7 +55,7 @@ void Shell::createShell() {
         shell_vec->z = radius*(float)(cos(phi));
 
         // reassign angles to match coordinate system
-        phi_calc = (shell_vec->x == 0 || shell_vec->x == 0.0d) ? 0.0d : atan2f(shell_vec->y,shell_vec->x);
+        phi_calc = (shell_vec->x == 0 || shell_vec->x == 0.0) ? 0.0 : atan2f(shell_vec->y,shell_vec->x);
         // theta = phi; //acosf((shell_vec->z/radius)); // acosf => range 0 to PI
         thetas[j] = (float)phi;
         phis[j] = phi_calc;
@@ -115,7 +115,7 @@ float Shell::getEpsilon(){
 void Shell::setModel(std::vector<vector3> & centered_coordinates, float dmin_lattice, float sigma) {
 
     float dis, cutoff =  (dmin_lattice+dmin)*0.5f;
-    float inv_sigma = 1.0d/(2.0*sigma*sigma);
+    float inv_sigma = 1.0/(2.0*sigma*sigma);
 
     useIt.resize(total_coordinates_in_shell);
 
@@ -184,51 +184,42 @@ void Shell::setModel(std::vector<vector3> & centered_coordinates, float dmin_lat
 void Shell::populateSphericalHarmonics(int lmax){
 
     this->lmax = lmax;
-    int csphase = -1, cnorm = 1;
-    int plmSize = ((lmax+1)*(lmax+2))/2 + 1; // (lmax+1)*(lmax+2)/2, add one to componsate fo
+//    int csphase = -1, cnorm = 1;
+//    int plmSize = ((lmax+1)*(lmax+2))/2 + 1; // (lmax+1)*(lmax+2)/2, add one to componsate fo
 
     ylm_size = (lmax+1)*(lmax+1)*total_coordinates_in_shell;
     y_lm_real.resize((unsigned long)ylm_size);
     y_lm_imag.resize((unsigned long)ylm_size);
-    p_lm_real.resize((unsigned long)(lmax+1)*(lmax+1));
-    p_lm_imag.resize((unsigned long)(lmax+1)*(lmax+1));
+//    p_lm_real.resize((unsigned long)(lmax+1)*(lmax+1));
+//    p_lm_imag.resize((unsigned long)(lmax+1)*(lmax+1));
 
-    plms.resize((unsigned long)(total_coordinates_in_shell*(plmSize-1)));
-    std::vector<double> plm((unsigned long)plmSize);
-    double * const ptrPLM = plms.data();
-
-    unsigned int plmCount=0;
-
-    double costheta;
-
-//    costheta = cos(M_PI/180.0*45);
-//    plmbar_(&plm[0], &lmax, &costheta, &csphase, &cnorm);
-//    std::cout << " LMAX " << lmax << std::endl;
-//    for (int j=1; j < plmSize; j++){
-//        std::cout << j << " " << (float)plm[j] << std::endl;
+//    plms.resize((unsigned long)(total_coordinates_in_shell*(plmSize-1)));
+//    std::vector<double> plm((unsigned long)plmSize);
+//    double * const ptrPLM = plms.data();
+//    unsigned int plmCount=0;
+//    double costheta;
+//    for(unsigned int long i=0; i<total_coordinates_in_shell; i++){
+//
+//        if (useIt[i]){
+//            costheta = cos(thetas[i]);
+//            // lmax
+//            plmbar_(&plm[0], &lmax, &costheta, &csphase, &cnorm); //FORTRAN SHTOOLS SHE
+//
+//            for (int j=1; j < plmSize; j++){
+//                ptrPLM[plmCount] = (float)plm[j];
+//                plmCount++;
+//            }
+//
+//        } else {
+//            for (int j=1; j < plmSize; j++){
+//                ptrPLM[plmCount] = 0.0;
+//                plmCount++;
+//            }
+//        }
 //    }
 
-    for(unsigned int long i=0; i<total_coordinates_in_shell; i++){
-
-        if (useIt[i]){
-            costheta = cos(thetas[i]);
-            // lmax
-            plmbar_(&plm[0], &lmax, &costheta, &csphase, &cnorm); //FORTRAN SHTOOLS SHE
-            for (int j=1; j < plmSize; j++){
-                ptrPLM[plmCount] = (float)plm[j];
-                plmCount++;
-            }
-
-        } else {
-            for (int j=1; j < plmSize; j++){
-                ptrPLM[plmCount] = 0.0d;
-                plmCount++;
-            }
-        }
-    }
-
     unsigned int index_lm = 0;
-    double factor = 0.5d * (sqrt(1.0/M_PI));
+    double factor = 0.5 * (sqrt(1.0/M_PI));
     float sinp, cosp;
     double result;
     float phiValue;
@@ -238,15 +229,15 @@ void Shell::populateSphericalHarmonics(int lmax){
     for(int l=0; l <= lmax; l++) { //  y_lm's
         for(int m=-l; m <= l; m++) { //assemble sphherical harmonics at constant l,m for all atoms
 
-            int lm_index = (l*(l+1))/2 + abs(m);
-
+//            int lm_index = (l*(l+1))/2 + abs(m);
             for (int i=0 ; i < total_coordinates_in_shell; i++) { // can't assume numAtoms is even
                 // includes negative angles for m < 0
-                phiValue = (-m*phis[i]); // Y*_lm is (-1)^m*Y_(-m, l)
-                result = ptrPLM[(i*(plmSize-1) + lm_index)] * factor;
-                __sincosf(phiValue, &sinp, &cosp);
-                ptrR[ index_lm ] = (float) (cosp * result);
-                ptrI[ index_lm ] = (float) (sinp * result);
+//                phiValue = (-m*phis[i]); // Y*_lm is (-1)^m*Y_(-m, l)
+//                result = ptrPLM[(i*(plmSize-1) + lm_index)] * factor;
+//                __sincosf(phiValue, &sinp, &cosp);
+                auto complex = boost::math::spherical_harmonic(l, m, thetas[i], phis[i]);
+                ptrR[ index_lm ] = complex.real()*factor;//(float) (cosp * result);
+                ptrI[ index_lm ] = complex.imag()*factor;//(float) (sinp * result);
                 index_lm++;
             }
         }
@@ -260,14 +251,14 @@ void Shell::updateDensityCoefficients(std::vector<vector3> & centered_coordinate
 
     float density;
 
-    float inv_sqrt = 1.0d/(sigma*sqrt(2.0*M_PI));
-    float inv_sigma = 1.0d/(2.0*sigma*sigma);
+    float inv_sqrt = 1.0/(sigma*sqrt(2.0*M_PI));
+    float inv_sigma = 1.0/(2.0*sigma*sigma);
 
     int index;
     float * const ptrR = y_lm_real.data();
     float * const ptrI = y_lm_imag.data();
 
-    float * const pPlmR = p_lm_real.data();
+    float * const pPlmR = p_lm_real.data(); // density values
     float * const pPlmI = p_lm_imag.data();
 
     float * const pAmps = amplitudes.data();

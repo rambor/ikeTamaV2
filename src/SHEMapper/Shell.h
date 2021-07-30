@@ -22,20 +22,22 @@
 
 
 #include <sastools/include/vector3.h>
+#include <boost/math/special_functions/spherical_harmonic.hpp>
 #include <iostream>
 #include <math.h>
 #include <string>
 #include <vector>
 #include <map>
+#include <set>
 
-extern "C" {
-   void plmbar_(double *    plm,
-             int *       lmax,
-             double *    z,
-             int *       csphase,
-             int *       cnorm
-   );
-};
+//extern "C" {
+//   void plmbar_(double *    plm,
+//             int *       lmax,
+//             double *    z,
+//             int *       csphase,
+//             int *       cnorm
+//   );
+//};
 
 
 class Shell {

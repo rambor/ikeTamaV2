@@ -129,7 +129,7 @@ TEST_F(DensityMapperTest, densityGridTest){
     dm.setAmplitudes(amps);
 
     // make map
-    dm.createXPLORMap();
+    dm.createXPLORMap("test");
 
     ASSERT_EQ(22, dm.getTotalShells());
 }

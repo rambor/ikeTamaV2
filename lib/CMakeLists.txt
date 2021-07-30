@@ -43,4 +43,4 @@ add_executable(${TEST_OBJ} ${CPP_FILES})
 
 target_link_libraries(${TEST_OBJ}
         ${BOOST_FILESYSTEM} ${BOOST_PO} ${BOOST_RANDOM} ${BOOST_REGEX} ${BOOST_SYSTEM}
-        ${QHULL_LIB} ${QHULLCPP_LIB} SASTools fSAXS gtest gtest_main)
+        ${QHULL_LIB} ${QHULLCPP_LIB} SASTools gtest gtest_main)
