@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
     float acceptanceRate = 0.44, eta = 0.001, mu = 0.0001f; // 10^-4 to 10^-5 seems to be acceptable
     unsigned int highTempRounds;
     float xaxis, yaxis, zaxis, cheight=0, cradius=0, toppercent=0.0035;
-    unsigned int multiple = 37;
+    unsigned int multiple = 37, trials=21371;
 
     unsigned int totalModels=1, totalPhasesForSeeded=1;
 
@@ -291,7 +291,6 @@ int main(int argc, char** argv) {
             std::cout << "  => creating KDE CE map " << std::endl;
             std::vector<std::string> datfiles = vm["dat"].as<std::vector<std::string> >();
 
-
             IofQData iofqdata_bsa = IofQData(datfiles[0], false);
             iofqdata_bsa.extractData();
             iofqdata_bsa.makeWorkingSet();
@@ -307,7 +306,7 @@ int main(int argc, char** argv) {
             //int totalroounds = dm.getTotalCenteredCoordinates()*10/0.01;
 
 //            dm.openMP();
-            dm.refineModel(50, 0.00713, 17137, workingset);
+            dm.refineModel(50, toppercent, highTempRounds, workingset);
 //            auto qvalues = iofqdata_bsa.getQvalues();
 //            int total_in = qvalues.size();
 //
