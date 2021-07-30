@@ -149,6 +149,8 @@ public:
     int getTotalCenteredCoordinates(){ return total_centered_coordinates;}
 
     std::string headerParametersForXPLOR(int &na, int &nb, int &nc);
+    std::string headerParametersForXPLORFlipped(int & na, int & nb, int & nc);
+
     void createXPLORMap(std::string name);
 
     void tester(std::string pdbfile,  std::vector<Datum> & workingSet);

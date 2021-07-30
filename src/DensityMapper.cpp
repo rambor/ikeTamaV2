@@ -703,11 +703,56 @@ std::string DensityMapper::headerParametersForXPLOR(int & na, int & nb, int & nc
     std::snprintf(buffer, 80, "%8i%8i%8i%8i%8i%8i%8i%8i%8i\n", na, startingNA, stoppingNA, nb, startingNB, stoppingNB, nc, startingNC, stoppingNC);
     tempHeader.append(buffer);
 
-    std::snprintf(buffer, 80, "%8i%8i%8i%8i%8i%8i%8i%8i%8i\n", na, -stoppingNA, -startingNA, nb, startingNB, stoppingNB, nc, startingNC, stoppingNC);
     std::snprintf(buffer, 80, "%12.5E%12.5E%12.5E%12.5E%12.5E%12.5E \n",a_side, b_side, c_side, 90.0, 90.0, 90.0);
 
     tempHeader.append(buffer);
     // std::cout << tempHeader << std::endl;
+    // write the matrix
+    tempHeader += "ZYX\n";
+
+    return tempHeader;
+}
+
+std::string DensityMapper::headerParametersForXPLORFlipped(int & na, int & nb, int & nc){
+
+    float grid_spacing = delta_r;
+
+    float cminx = -kmax;
+    float cmaxx = kmax;
+    float cminy = -kmax;
+    float cmaxy = kmax;
+    float cminz = -kmax;
+    float cmaxz = kmax;
+    float a_side = cmaxx - cminx;
+    float b_side = cmaxy - cminy;
+    float c_side = cmaxz - cminz;
+
+    auto startingNA = (int)std::round(cminx/grid_spacing);
+    auto startingNB = (int)std::round(cminy/grid_spacing);
+    auto startingNC = (int)std::round(cminz/grid_spacing);
+
+    auto stoppingNA = (int)std::round(cmaxx/grid_spacing);
+    auto stoppingNB = (int)std::round(cmaxy/grid_spacing);
+    auto stoppingNC = (int)std::round(cmaxz/grid_spacing);
+
+    na = std::abs(startingNA) + std::abs(stoppingNA) + 1;
+    nb = std::abs(startingNB) + std::abs(stoppingNB) + 1;
+    nc = std::abs(startingNC) + std::abs(stoppingNC) + 1;
+
+    std::string tempHeader = "\n";
+    tempHeader += "        4 !NTITLE\n";
+    tempHeader += "REMARK 265 EXPERIMENTAL DETAILS\n";
+    tempHeader += "REMARK 265\n";
+    tempHeader += "REMARK 265 EXPERIMENT TYPE : X-RAY SOLUTION SCATTERING\n";
+    tempHeader += "REMARK 265 DATA ACQUISITION\n";
+
+    char buffer[80];
+    std::snprintf(buffer, 80, "%8i%8i%8i%8i%8i%8i%8i%8i%8i\n", na, -stoppingNA, -startingNA, nb, startingNB, stoppingNB, nc, startingNC, stoppingNC);
+    tempHeader.append(buffer);
+
+    std::snprintf(buffer, 80, "%12.5E%12.5E%12.5E%12.5E%12.5E%12.5E \n",a_side, b_side, c_side, 90.0, 90.0, 90.0);
+
+    tempHeader.append(buffer);
     // write the matrix
     tempHeader += "ZYX\n";
 
@@ -738,6 +783,7 @@ void DensityMapper::createXPLORMap(std::string name){
 
     std::vector<float> averages;
     std::vector<vector3> coords_averages;
+    std::map<std::string, float > kernel_mapping;
 
     for(int z=0; z<nc; z++){
 
@@ -779,6 +825,8 @@ void DensityMapper::createXPLORMap(std::string name){
 
                 std::snprintf(buffer, 80, "%12.5E", kernelSum);
                 tempHeader.append(buffer);
+                kernel_mapping.emplace(key, kernelSum);
+
                 stringIndex += 1;
 
                 if (stringIndex%6 == 0 ){
@@ -816,22 +864,87 @@ void DensityMapper::createXPLORMap(std::string name){
 
     float average = (mapSumSquared/mapCount);
     float stdev = std::sqrt(mapSumSquared/mapCount - ave*ave);
-    float aboveit = average + 2.2f*stdev;
-    float belowit = average + 3.0f*stdev;
+    float aboveit = average + 2.5f*stdev;
 
     int index = 1;
     for(int i=0; i<averages.size(); i++){
         float value = averages[i];
         if(value > aboveit){ // print
             vector3 & vec = coords_averages[i];
-            //printf("%-6s%5i %4s %3s %1s%4i    %8.3f%8.3f%8.3f  1.00%5.2f\n", "ATOM", 1," CA ", "ALA", "A", index, vec.x, vec.y, vec.z, averages[i] );
             std::snprintf(buffer, 80, "%-6s%5i %4s %3s %1s%4i    %8.3f%8.3f%8.3f  1.00%5.2f\n", "ATOM", 1," CA ", "ALA", "A", index, vec.x, vec.y, vec.z, value );
             tempHeader.append(buffer);
             index++;
         }
     }
 
+    tempHeader.append("END\n");
     std::string out = name+"_above_average.pdb";
+    outputFileName = out.c_str();
+
+    pFile = fopen(outputFileName, "w");
+    fprintf(pFile, tempHeader.c_str());
+    fclose(pFile);
+
+    /*
+     * calculate flipped map
+     * flip the map x -> -x
+     * reverse the order for each section
+     */
+    tempHeader = headerParametersForXPLORFlipped(na, nb, nc);
+    out = name + "_cemask_flipped";
+
+    for(int z=0; z<nc; z++){
+
+        std::snprintf(buffer, 80, "%8i\n", z);
+        tempHeader.append(buffer);
+        unsigned int stringIndex = 0;
+
+        for(int y=0; y<nb; y++){
+            for(int x=(na-1); x>=0; x--){ // reverse order
+
+                std::string key = std::to_string(x)+"-"+std::to_string(y)+"-"+std::to_string(z);
+
+                auto allIt = kernel_mapping.find(key);
+                /*
+                 * write to file
+                 */
+                std::snprintf(buffer, 80, "%12.5E", (*allIt).second);
+                tempHeader.append(buffer);
+                stringIndex += 1;
+
+                if (stringIndex%6 == 0 ){
+                    tempHeader += "\n";
+                }
+            }
+        }
+
+        if (stringIndex % 6 != 0){
+            tempHeader += "\n";
+        }
+    }
+
+    map = out + "_map.xplor";
+    outputFileName = map.c_str();
+
+    pFile = fopen(outputFileName, "w");
+    fprintf(pFile, tempHeader.c_str());
+    fclose(pFile);
+
+    // write out flipped PDB coordinates
+    tempHeader = "";
+
+    index = 1;
+    for(int i=0; i<averages.size(); i++){
+        float value = averages[i];
+        if(value > aboveit){ // print
+            vector3 & vec = coords_averages[i];
+            std::snprintf(buffer, 80, "%-6s%5i %4s %3s %1s%4i    %8.3f%8.3f%8.3f  1.00%5.2f\n", "ATOM", 1," CA ", "ALA", "A", index, -vec.x, vec.y, vec.z, value );
+            tempHeader.append(buffer);
+            index++;
+        }
+    }
+    tempHeader.append("END\n");
+    out = name+"_above_average_flipped.pdb";
     outputFileName = out.c_str();
 
     pFile = fopen(outputFileName, "w");

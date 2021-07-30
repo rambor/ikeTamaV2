@@ -1183,7 +1183,6 @@ float KDE::map_refine(PointSetModel *pModel, PofRData *pData, std::string outnam
     float adjustedCMINX, adjustedCMINY, adjustedCMINZ;
     std::string tempHeader = headerParametersForXPLOR(na, nb, nc, adjustedCMINX, adjustedCMINY, adjustedCMINZ);
 
-
     float inv2Pi = 1.0f/(float)std::sqrt(2*M_PI);
     float invhd = 1.0f; //dimension of the kernel
     float mapSum = 0.0f, mapSumSquared = 0.0f;
