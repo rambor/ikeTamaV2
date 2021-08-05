@@ -70,20 +70,17 @@ public:
         return amplitudes[selected];
     }
 
-
-    float getWeightedAmplitude(){
-
-        float sum=0;
+    void setWeightedAmplitude(){
+        prior_amplitude=0;
         for(int i=0; i<total_amplitudes; i++){
-            sum += probabilities[i]*amplitudes[i];
+            prior_amplitude += probabilities[i]*amplitudes[i];
         }
-
-        return sum;
     }
 
     float CDF(float value);
 
     std::string getDetails();
+
 };
 
 

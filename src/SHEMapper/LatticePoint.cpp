@@ -36,7 +36,9 @@ LatticePoint::LatticePoint(int index, int bins) : index(index), bins(bins) {
 //    amplitudes[1] = 0.233f;
 //    amplitudes[2] = 0.47f;
 //    amplitudes[3] = 1.0f;
-    amplitudes[0] = -0.1f;
+
+    // electron densities - nucleic, protein, lipid, and lipid subtracted water and divided by largest value
+    amplitudes[0] = -0.269f;
     amplitudes[1] = 0.103f;
     amplitudes[2] = 0.682543f;
     amplitudes[3] = 1.0f;
@@ -53,7 +55,6 @@ LatticePoint::LatticePoint(int index, int bins) : index(index), bins(bins) {
      *  0.4
      */
 
-
     total_amplitudes = amplitudes.size();
     probabilities.resize(total_amplitudes);
     occurences.resize(total_amplitudes);
@@ -62,6 +63,8 @@ LatticePoint::LatticePoint(int index, int bins) : index(index), bins(bins) {
     for(auto & pp : probabilities){
         pp = prob;
     }
+
+    this->setWeightedAmplitude();
 }
 
 /*
@@ -109,6 +112,12 @@ void LatticePoint::addToCounter(float value) {
      * 0.5
      * 0.75
      * 1.0
+     *
+     *     amplitudes[0] = -0.1f;
+     *     amplitudes[1] = 0.103f;
+     *     amplitudes[2] = 0.682543f;
+     *     amplitudes[3] = 1.0f;
+     *
      */
     for(int i=0; i<total_amplitudes; i++){
         if (abs(value - amplitudes[i]) < 0.01){
@@ -127,25 +136,26 @@ void LatticePoint::updateProbabilities(){
     }
 
     auto invTotal = 1.0f/(float)sum;
-    float prob;
 
     const float updateAlpha=0.67f;
-    float oldprob;
+    float oldprob, newprob;
 
     int index = 0;
+    float temp;
     for(auto & point : occurences){
 
-        prob = probabilities[index];
-        oldprob = (1.0f - updateAlpha)*prob;
+        oldprob = (1.0f - updateAlpha)*probabilities[index];
 
         if (point > 0){
-            probabilities[index] = updateAlpha*(point*invTotal) + oldprob;
+            newprob = updateAlpha*((float)point*invTotal) + oldprob;
         } else {
-            probabilities[index] = oldprob;
+            newprob = oldprob;
         }
 
+        probabilities[index] = newprob;
         index++;
     }
+
 }
 
 
@@ -153,16 +163,19 @@ void LatticePoint::updateProbabilities(){
 void LatticePoint::printProbabilities(){
 
     float best = probabilities[0];
+    float sum = 0.0f;
 
     int count = 0, keep=0;
     for(auto & pp : probabilities){
+        std::cout << count << " " << amplitudes[count] << " " << pp << " " << occurences[count] << std::endl;
+        sum += pp;
         if (pp > best){
             best = pp;
             keep = count;
         }
         count++;
     }
-    std::cout<< index << " best " << keep << " P[best] " << probabilities[keep] << std::endl;
+    std::cout << "LATTICE :: "<< index << " sum " << " " << sum << std::endl;
 }
 
 

@@ -140,7 +140,9 @@ public:
 
     void setAmplitudes(std::vector<float> &amplitudes);
 
-    void refineModel(int max_rounds, float topPercent, int models_per_round,  std::vector<Datum> & workingSet);
+    void refineModel(int max_rounds, float topPercent, int models_per_round,
+                     std::vector<Datum> & workingSet,
+                     std::vector<Datum> & workingSetSmoothed);
 
     void createDensityMapGrid();
 
@@ -168,7 +170,7 @@ public:
     float calculateScaleFactor(unsigned int total, float *const pICalc, float *const pSigma, Datum *const pWorkingSet);
 
     float getChiSquare(unsigned int total, float scale, float *const pICalc, float *const pSigma,
-                       Datum *const pWorkingSet, float * const res);
+                       Datum *const pWorkingSet, Datum *const pWorkingSetSmoothed, float * const res);
 
     void writeICalc(unsigned int total, float scale, float *const pICalc, Datum *const pWorkingSet, std::string name);
 

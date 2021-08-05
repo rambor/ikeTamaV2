@@ -56,14 +56,14 @@ int main(int argc, char** argv) {
 
     float acceptanceRate = 0.44, eta = 0.001, mu = 0.0001f; // 10^-4 to 10^-5 seems to be acceptable
     unsigned int highTempRounds;
-    float xaxis, yaxis, zaxis, cheight=0, cradius=0, toppercent=0.0035;
+    float xaxis, yaxis, zaxis, cheight=0, cradius=0, toppercent=0.00875;
     unsigned int multiple = 37, trials=21371;
 
     unsigned int totalModels=1, totalPhasesForSeeded=1;
 
     std::string sym, prefix, maskFile, seedFile, phaseFile, hFile, anchorFile, consFile, fileList, histoFile;
     bool reduce=false, cemap=false, kdemap=false, makeSeed=false, mask=false, useCylinder=false, histo=false;
-    bool useHelical=false, axesSet=false, isSeeded = false, fast=false, refine=false;
+    bool useHelical=false, axesSet=false, isSeeded = false, fast=false, refine=false, useUnSmoothed=false;
 
     std::string descText =
             "\n              USAGE : sugatama myRefinedScatterData_pr.dat\n";
@@ -161,6 +161,7 @@ int main(int argc, char** argv) {
             ("KDEmap", po::bool_switch(&kdemap), "List of files to make estimated map")
             ("cemap", po::bool_switch(&cemap), "CROSS-ENTROPY MAP from list of aligned models")
             ("makeSeed", po::bool_switch(&makeSeed), "create seed model from list of aligned models")
+            ("useUnSmoothed", po::bool_switch(&useUnSmoothed), "Use Smoothed IofQ data (default)")
             ("toppercent", po::value<float>(&toppercent), "TOP PERCENT of trials to select per round for CE optimization")
             ("example", po::value<std::string>(&example), "anchor, helical")
             ("histogram", po::bool_switch(&histo), "")
@@ -291,12 +292,12 @@ int main(int argc, char** argv) {
             std::cout << "  => creating KDE CE map " << std::endl;
             std::vector<std::string> datfiles = vm["dat"].as<std::vector<std::string> >();
 
-            IofQData iofqdata_bsa = IofQData(datfiles[0], false);
-            iofqdata_bsa.extractData();
-            iofqdata_bsa.makeWorkingSet();
-            //auto workingset = iofqdata_bsa.getWorkingSet();
-            auto workingset = iofqdata_bsa.getWorkingSetSmoothed();
-            float qmax = iofqdata_bsa.getQmax();
+            IofQData iofqdata = IofQData(datfiles[0], false);
+            iofqdata.extractData();
+            iofqdata.makeWorkingSet();
+            auto workingset = iofqdata.getWorkingSet();
+            auto workingsetSmoothed = iofqdata.getWorkingSetSmoothed();
+            float qmax = iofqdata.getQmax();
 
             DensityMapper dm(maskFile, qmax, 2.5);
 
@@ -306,7 +307,12 @@ int main(int argc, char** argv) {
             //int totalroounds = dm.getTotalCenteredCoordinates()*10/0.01;
 
 //            dm.openMP();
-            dm.refineModel(50, toppercent, highTempRounds, workingset);
+
+    dm.refineModel(50, toppercent, highTempRounds,
+                   const_cast<std::vector<Datum> &>(iofqdata.getWorkingSet()),
+                   const_cast<std::vector<Datum> &>(iofqdata.getWorkingSetSmoothed()));
+
+
 //            auto qvalues = iofqdata_bsa.getQvalues();
 //            int total_in = qvalues.size();
 //
