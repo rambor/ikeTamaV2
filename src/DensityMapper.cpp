@@ -403,7 +403,8 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
     std::vector<float> i_calc(total_data);
     std::vector<float> trial_residuals(total_data);
 
-    int total_residuals = total_data*5; // only look at top 5 models
+    int total_sets_in_residuals=3;
+    int total_residuals = total_data*total_sets_in_residuals; // only look at top 5 models
     std::vector<float> residuals(total_residuals);
     float * const pRes = residuals.data();
 
@@ -411,7 +412,7 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
     float * const pSigma = sigmas_squared.data();
     const LatticePoint * pLattice = lattice_points.data();
 
-    float chi2, scale, ave;
+    float chi2, scale, ave, dw;
 
     //this->setBessels(qvalues);
     this->createHCPGrid(); //
@@ -422,7 +423,6 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
     this->setDebyeFactors(workingSet);
     //this->setYlms();
 
-    float dw;
     logger("STARTING", "REFINEMENT");
     logger("Total Trials per Round", formatNumber((unsigned)models_per_round));
     logger("TopN", formatNumber((unsigned)topN));
@@ -507,7 +507,6 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
                 if (topAdded == topN){
                     std::sort(topTrials.begin(), topTrials.begin()+topAdded);
                 }
-
             } else {
                 if (chi2 < topTrials[last].value){
                     /*
@@ -536,7 +535,6 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
             point.resetCounter();
         }
 
-
         for(auto & trial : topTrials){
             int lattice_index = 0;
             for(auto & assignedDensity : trial.model_amplitudes){
@@ -552,7 +550,7 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
 
         // calculate DurbinWatson for the top5
         int indexer=0;
-        for(int top5=0; top5<3; top5++){
+        for(int top5=0; top5<total_sets_in_residuals; top5++){
             // copy residuals into total_residuals
             auto & trial = topTrials[top5];
             for(auto & res : trial.residuals){
@@ -608,7 +606,7 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
             }
             logger("Last 4 MAX DIFF", formatNumber(variation, 3));
             variations[round] = variation;
-            if (variation < 0.01 && dw < 0.1){
+            if ( (variation < 0.01 && dw < 0.1) || round == (max_rounds-1)){
                 for(int i=0; i<lattice_points.size(); i++){
                     pAmp[i] = 0;
                 }
@@ -639,7 +637,7 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
 
         std::cout << " " << std::endl;
 
-        if (round > 3 && models_per_round > base_models_per_round){
+        if (round > 3 && models_per_round >= base_models_per_round){
             models_per_round = base_models_per_round;
         }
     }
@@ -1304,12 +1302,12 @@ void DensityMapper::setDebyeFactors(std::vector<Datum> &workingSet) {
         }
     }
     //std::cout << " Total Distances " << (totalKept*(totalKept-1)/2 + totalKept) << " " << distances.size() << std::endl;
-
     // populate debye factors
 
 
     unsigned int long size_of_dbf = (totalKept*(totalKept-1)/2 + totalKept)*workingSet.size();
-    debye_factors = (float *)_aligned_malloc(sizeof(float)*size_of_dbf, 16); // 16 byte aligned
+//    debye_factors = (float *)_aligned_malloc(sizeof(float)*size_of_dbf, 16); // 16 byte aligned
+    debye_factors = new float[size_of_dbf]; // 16 byte aligned
 
     unsigned int long counter = 0;
     for(auto & data : workingSet){
@@ -1339,7 +1337,7 @@ void DensityMapper::populateICalc(unsigned int total_q, std::vector<float> & iCa
 
     unsigned int totalHCPInUse = keptHCPLatticePoints.size(); // shared memory
 //    const float * const pAmp = &squared_amplitudes.front();
-    const float * const pDebye = &debye_factors[0];//.front(); // shared memory
+//    const float * const pDebye = &debye_factors[0];//.front(); // shared memory
 //    const simde_float32 * const pDebye = &debye_factors.front(); // shared memory
 
     float intensity_r_at_zero=0.0f;
@@ -1373,16 +1371,16 @@ void DensityMapper::populateICalc(unsigned int total_q, std::vector<float> & iCa
             //_m128 is four floating point numbers (4x32 = 128 bits) => 16 bytes total
             // one byte is equivalent to eight bits
 //            v0 = simde_mm_loadu_ps(pAmp + i + 0); // loading 4 floats at a time
-//            v1 = simde_mm_loadu_ps(pDebye + next_i + 0);
             v0 = simde_mm_load_ps(&squared_amplitudes[i]); // loading 4 floats at a time or 16 bytes total
-            v1 = simde_mm_load_ps(&debye_factors[next_i]);
+            v1 = simde_mm_loadu_ps(&debye_factors[next_i]);
+//            v1 = simde_mm_load_ps(&debye_factors[next_i]);
             s01 = simde_mm_mul_ps(v0,v1);
             mmSum = simde_mm_add_ps(mmSum, s01);
 
             //v2 = simde_mm_loadu_ps(pAmp + i + 4); // loading next 4 floats for total 8 per cycle
-            //v3 = simde_mm_loadu_ps(pDebye + next_i  + 4);
             v2 = simde_mm_load_ps(&squared_amplitudes[i + 4]); // loading next 4 floats for total 8 per cycle
-            v3 = simde_mm_load_ps(&debye_factors[next_i  + 4]);
+//            v3 = simde_mm_load_ps(&debye_factors[next_i  + 4]);
+            v3 = simde_mm_loadu_ps(&debye_factors[next_i + 4]);
             s23 = simde_mm_mul_ps(v2,v3);
             mmSum = simde_mm_add_ps(mmSum, s23);
 
@@ -1452,8 +1450,7 @@ float DensityMapper::getChiSquare(unsigned int total, float scale, float * const
         chi2 += diff_value;
 
         // use the workset residuals to calculate durbin watson
-        diff_value = pWorkingSet[i].getI() - scale*icalc;
-        res[i] = diff_value;
+        res[i] = pWorkingSet[i].getI() - scale*icalc;
     }
     return chi2/(float)total;
 }
