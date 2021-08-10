@@ -178,6 +178,7 @@ public:
 
 //    void openMP();
 
+    void writeLatticePoints(std::string name);
 };
 
 

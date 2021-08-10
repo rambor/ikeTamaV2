@@ -587,6 +587,7 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
         }
 
         this->createXPLORMap("best_"+std::to_string(round));
+        writeLatticePoints("best_"+std::to_string(round));
 
         ave = populateDensities(amplitudes, hcp_electron_densities, squared_amplitudes);
         populateICalc(total_data, i_calc, squared_amplitudes);
@@ -631,7 +632,8 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
                     pAmp[i] /= 3.0f;
                 }
 
-                this->createXPLORMap("top3_averaged_"+std::to_string(round));
+                this->createXPLORMap("top3_averaged");
+                writeLatticePoints("top3_averaged");
                 break;
             }
             variation = 0;
@@ -1015,12 +1017,50 @@ void DensityMapper::createXPLORMap(std::string name){
         }
     }
     tempHeader.append("END\n");
-    out = name+"_above_average_flipped.pdb";
+    out = name+"flipped_above_average.pdb";
     outputFileName = out.c_str();
 
     pFile = fopen(outputFileName, "w");
     fprintf(pFile, tempHeader.c_str());
     fclose(pFile);
+}
+
+
+void DensityMapper::writeLatticePoints(std::string name){
+
+    float sum = 0.0f;
+
+    for(auto & lat : lattice_points){
+        sum += lat.getMostProbableAmplitude();
+    }
+    float avg = sum/(float)lattice_points.size();
+
+    char buffer[80];
+    std::string tempHeader = "";
+    std::snprintf(buffer, 80, "REMARK AVG %.3f\n", avg);
+    tempHeader.append(buffer);
+    std::snprintf(buffer, 80, "REMARK Total Points in Base %5i\n", lattice_points.size());
+    tempHeader.append(buffer);
+    int index =1;
+    /*
+     * centered_coordinates holds coordiniates lattice_point
+     */
+    for(auto & lat : lattice_points){
+        if (lat.getMostProbableAmplitude() > avg){
+            vector3 & vec = centered_coordinates[lat.getIndex()];
+            std::snprintf(buffer, 80, "%-6s%5i %4s %3s %1s%4i    %8.3f%8.3f%8.3f  1.00%5.2f\n", "ATOM", 1," CA ", "ALA", "A", index, vec.x, vec.y, vec.z, lat.getMostProbableAmplitude() );
+            tempHeader.append(buffer);
+            index++;
+        }
+    }
+
+    std::string out = name + "_base.pdb";
+    const char * outputFileName = out.c_str();
+
+    FILE * pFile = fopen(outputFileName, "w");
+    fprintf(pFile, tempHeader.c_str());
+    fclose(pFile);
+
 }
 
 void DensityMapper::createHCPGrid(){
