@@ -416,10 +416,17 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
 
     //this->setBessels(qvalues);
     this->createHCPGrid(); //
-    std::vector<float> hcp_electron_densities(keptHCPLatticePoints.size());
+    unsigned int long totalKept = keptHCPLatticePoints.size();
+    std::vector<float> hcp_electron_densities(totalKept);
+
+    unsigned int long size_of_dbf = (totalKept*(totalKept-1)/2 + totalKept)*workingSet.size();
+//    debye_factors = new alignas(16) float[size_of_dbf];
+    debye_factors = (float *)_aligned_malloc(sizeof(float)*size_of_dbf + 16, 16); // 16 byte aligned
+//    debye_factors = new float[size_of_dbf]; // 16 byte aligned
+
     // use aligned memory for squared amplitudes and debye_factors
     //std::vector<float> squared_amplitudes(keptHCPLatticePoints.size()*(keptHCPLatticePoints.size()-1)/2 + keptHCPLatticePoints.size());
-    auto * squared_amplitudes = (float *)_aligned_malloc(sizeof(float)*(keptHCPLatticePoints.size()*(keptHCPLatticePoints.size()-1)/2 + keptHCPLatticePoints.size()), 16);
+    auto * squared_amplitudes = (float *)_aligned_malloc(sizeof(float)*((totalKept*(totalKept-1)/2 + totalKept)), 16);
     this->setDebyeFactors(workingSet);
     //this->setYlms();
 
@@ -1305,9 +1312,9 @@ void DensityMapper::setDebyeFactors(std::vector<Datum> &workingSet) {
     // populate debye factors
 
 
-    unsigned int long size_of_dbf = (totalKept*(totalKept-1)/2 + totalKept)*workingSet.size();
+//    unsigned int long size_of_dbf = (totalKept*(totalKept-1)/2 + totalKept)*workingSet.size();
 //    debye_factors = (float *)_aligned_malloc(sizeof(float)*size_of_dbf, 16); // 16 byte aligned
-    debye_factors = new float[size_of_dbf]; // 16 byte aligned
+//    debye_factors = new float[size_of_dbf]; // 16 byte aligned
 
     unsigned int long counter = 0;
     for(auto & data : workingSet){
@@ -1351,58 +1358,53 @@ void DensityMapper::populateICalc(unsigned int total_q, std::vector<float> & iCa
     unsigned int locale;
 
     float * pICalc = iCalc.data();
-    unsigned int window = 8, next_i;
+    unsigned int window = 8, next_i; // window is 8 for _m128 and 16 for _m256
     auto end_N = (unsigned int)std::floor(total_width/window);
     unsigned int start_of_tail = end_N*window;
 
-    simde__m128 mmSum, v0, v1, v2, v3, s01, s23;
-//    simde__m256 mmSum; // vector of 8 floating point numbers
+    simde__m128 mmSum1, mmSum2, v0, v1, v2, v3, s01, s23;
+//    simde__m256 mmSum1, mmSum2; // vector of 8 floating point numbers
 
-    float icalc_sse[4];
+    float icalc_sse[4]; // size is 4 for m128 and 8 for m256
 
     for(unsigned int q_index = 0; q_index < total_q; q_index++) {
 
-        locale = q_index * total_width;
-//        mmSum = simde_mm256_setzero_ps();
-        mmSum = simde_mm_setzero_ps();
+        next_i  = q_index * total_width;
+        mmSum1 = simde_mm_setzero_ps();
+        mmSum2 = simde_mm_setzero_ps();
 
         for (unsigned int i=0; i < start_of_tail; i+=window ){ // SSE intrinsic here would multiply and then sum
-            next_i = locale + i;
+            next_i += window;
             //_m128 is four floating point numbers (4x32 = 128 bits) => 16 bytes total
             // one byte is equivalent to eight bits
-//            v0 = simde_mm_loadu_ps(pAmp + i + 0); // loading 4 floats at a time
             v0 = simde_mm_load_ps(&squared_amplitudes[i]); // loading 4 floats at a time or 16 bytes total
-            v1 = simde_mm_loadu_ps(&debye_factors[next_i]);
-//            v1 = simde_mm_load_ps(&debye_factors[next_i]);
-            s01 = simde_mm_mul_ps(v0,v1);
-            mmSum = simde_mm_add_ps(mmSum, s01);
+            v1 = simde_mm_load_ps(&debye_factors[next_i]);
+//            s01 = simde_mm_mul_ps(v0,v1);
+            mmSum1 = simde_mm_add_ps(mmSum1, simde_mm_mul_ps(v0,v1));
 
-            //v2 = simde_mm_loadu_ps(pAmp + i + 4); // loading next 4 floats for total 8 per cycle
             v2 = simde_mm_load_ps(&squared_amplitudes[i + 4]); // loading next 4 floats for total 8 per cycle
-//            v3 = simde_mm_load_ps(&debye_factors[next_i  + 4]);
-            v3 = simde_mm_loadu_ps(&debye_factors[next_i + 4]);
-            s23 = simde_mm_mul_ps(v2,v3);
-            mmSum = simde_mm_add_ps(mmSum, s23);
-
+            v3 = simde_mm_load_ps(&debye_factors[next_i + 4]);
+//            s23 = simde_mm_mul_ps(v2,v3);
+            mmSum2 = simde_mm_add_ps(mmSum2, simde_mm_mul_ps(v2,v3));
             // unroll 2-times in windows of 8 long for _m256
-//            simde__m256 v0 = simde_mm256_loadu_ps(pAmp + i + 0);
-//            simde__m256 v1 = simde_mm256_loadu_ps(pDebye + next_i + 0);
+//            simde__m256 v0 = simde_mm256_loadu_ps(&squared_amplitudes[i]);
+//            simde__m256 v1 = simde_mm256_loadu_ps(&debye_factors[next_i]);
 //            simde__m256 s01 = simde_mm256_mul_ps(v0, v1);
-//            mmSum = simde_mm256_add_ps(mmSum, s01);
+//            mmSum1 = simde_mm256_add_ps(mmSum1, s01);
 //
-//            simde__m256 v2 = simde_mm256_loadu_ps(pAmp + i + 8);
-//            simde__m256 v3 = simde_mm256_loadu_ps(pDebye + next_i  + 8);
+//            simde__m256 v2 = simde_mm256_loadu_ps(&squared_amplitudes[i + 8]);
+//            simde__m256 v3 = simde_mm256_loadu_ps(&debye_factors[next_i + 8]);
 //            simde__m256 s23 = simde_mm256_mul_ps(v2, v3);
-//            mmSum = simde_mm256_add_ps(mmSum, s23);
+//            mmSum1 = simde_mm256_add_ps(mmSum1, s23);
         }
-
-        simde_mm_store_ps(icalc_sse, mmSum);
-//        simde_mm256_store_ps(icalc_sse, mmSum);
+        mmSum1 = simde_mm_hadd_ps(mmSum1, mmSum2);
+        simde_mm_storeu_ps(icalc_sse, mmSum1);
+//        simde_mm_store_ps(icalc_sse, mmSum1);
+//        simde_mm256_store_ps(icalc_sse, mmSum1);
         intensity2=icalc_sse[0] + icalc_sse[1] + icalc_sse[2] + icalc_sse[3];// + icalc_sse[4] + icalc_sse[5] + icalc_sse[6] + icalc_sse[7];
 
         // add remaining bits since we can't do in full width of 8
         for (unsigned int i=start_of_tail; i < total_width; i++ ){ // SSE intrinsic here would multiple and then sum
-            //intensity2 += *(pAmp+i)* *(pDebye + locale + i);
             intensity2 += squared_amplitudes[i] * debye_factors[locale + i];
         }
 
