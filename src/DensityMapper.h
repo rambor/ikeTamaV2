@@ -26,8 +26,6 @@
 #include <Eigen/Core>
 #include <sastools/include/simde-no-tests-master/simde-arch.h>
 #include <sastools/include/simde-no-tests-master/simde-common.h>
-#include <sastools/include/simde-no-tests-master/x86/avx.h>
-//#include <immintrin.h>
 
 #ifdef __APPLE__ //Mac OSX has a different name for the header file
     #include <OpenCL/opencl.h>
