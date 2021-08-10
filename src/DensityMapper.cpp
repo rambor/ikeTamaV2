@@ -422,7 +422,6 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
     unsigned int long size_of_dbf = (totalKept*(totalKept-1)/2 + totalKept)*workingSet.size();
 //    debye_factors = new alignas(16) float[size_of_dbf];
     debye_factors = (float *)_aligned_malloc(sizeof(float)*size_of_dbf + 16, 16); // 16 byte aligned
-//    debye_factors = new float[size_of_dbf]; // 16 byte aligned
 
     // use aligned memory for squared amplitudes and debye_factors
     //std::vector<float> squared_amplitudes(keptHCPLatticePoints.size()*(keptHCPLatticePoints.size()-1)/2 + keptHCPLatticePoints.size());
