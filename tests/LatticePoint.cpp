@@ -113,19 +113,17 @@ TEST_F(LatticePointTest, testCDFTest){
 
     /*
      * i AMP    probability
-     * 0 0.0 0.0    < v <= 0.1667
-     * 1 0.2 0.1667 < v <= 0.3333
-     * 2 0.4 0.3333 < v <= 0.5
-     * 3 0.6 0.5    < v <= 0.6666
-     * 4 0.8 0.6667 < v <= 0.833
-     * 5 1.0 0.8333 < v <= 1.0
+    amplitudes[0] = -0.269f;
+    amplitudes[1] = 0.103f;
+    amplitudes[2] = 0.682543f;
+    amplitudes[3] = 1.0f;
      */
-    LatticePoint lp0(0,5);
-    ASSERT_EQ(lp0.CDF(0.1), 0);
-    ASSERT_NEAR(lp0.CDF(0.2), 0.2, 0.01);
-    ASSERT_NEAR(lp0.CDF(0.33), 0.2, 0.01);
-    ASSERT_NEAR(lp0.CDF(0.49), 0.4, 0.01);
-    ASSERT_NEAR(lp0.CDF(0.65), 0.6, 0.01);
-    ASSERT_NEAR(lp0.CDF(0.83), 0.8, 0.01);
+    LatticePoint lp0(0,3);
+    ASSERT_NEAR(lp0.CDF(0.1), -0.269, 0.01);
+    ASSERT_NEAR(lp0.CDF(0.2), -0.269, 0.01);
+    ASSERT_NEAR(lp0.CDF(0.33), 0.103, 0.01);
+    ASSERT_NEAR(lp0.CDF(0.49), 0.103, 0.01);
+    ASSERT_NEAR(lp0.CDF(0.65), 0.682543, 0.01);
+    ASSERT_NEAR(lp0.CDF(0.83), 1.0, 0.01);
     ASSERT_NEAR(lp0.CDF(0.85), 1.0, 0.01);
 }

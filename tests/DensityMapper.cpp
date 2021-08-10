@@ -98,8 +98,6 @@ TEST_F(DensityMapperTest, printLatticePointsTest){
 
     dm.printLatticePointsInfo();
 
-    ASSERT_EQ(11, dm.getTotalShells());
-
 }
 
 
