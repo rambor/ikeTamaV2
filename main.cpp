@@ -82,7 +82,7 @@ int main(int argc, char** argv) {
     descText += "\n ====>     mu : controls strength of volume constraint for the CVX hull in initial search";
     descText += "\n ====>   \n\n";
     descText += "\n SEQUENTIAL RUNS IN BASH SHELL";
-    descText += "\n ====>  for i in {0..11} ; do iketama file_pr.dat -p run_${i} ; done\n\n";
+    descText += "\n ====>  for i in {0..17} ; do iketama file_pr.dat -p run_${i} ; done\n\n";
     descText += "\n ====>  ";
     descText += "\n MODELS WITH SYMMETRY";
     descText += "\n ====>  increase mu to 0.01 using --mu 0.01 and set -u to a higher value";
@@ -98,6 +98,7 @@ int main(int argc, char** argv) {
     descText += "\n ====>  kde.inp is a list of pdb files that are aligned to a reference";
     descText += "\n ====>  ** REFERENCE pdb model must be the first file in the list";
     descText += "\n ====>  ";
+    descText += "\n ====>  file_pr.dat --cemap --mask remapped_unfiltered.pdb -c 50";
     descText += "\n ====>  file_pr.dat --cemap --list kde.inp  --toppercent 0.001";
     descText += "\n ====>  ";
     descText += "\n ====>  with SYMMETRY";
@@ -246,28 +247,28 @@ int main(int argc, char** argv) {
         /*
          * Kernel Density Approximations to aligned set of models
          */
-        if (vm["KDEmap"].as<bool>()){
-            std::cout << "  => creating KDE map " << std::endl;
-            std::vector<std::string> datfiles = vm["dat"].as<std::vector<std::string> >();
-            PofRData data(datfiles[0], false);
-
-            bead_radius = (float)(0.4999999f * (data.getBinWidth())); // half bin width
-
-            if (toppercent < 0.001){
-                throw std::invalid_argument("** ERROR => TOPPERCENT : TOO SMALL MUST BE GREATER THAN 0.001 : " + std::to_string(toppercent) );
-            }
-
-            KDE kde(fileList, bead_radius, toppercent);
-            std::cout << " BOUNDING BOX X " << kde.getCenteredMaxX() << std::endl;
-            std::cout << " BOUNDING BOX Y " << kde.getCenteredMaxY() << std::endl;
-            std::cout << " BOUNDING BOX Z " << kde.getCenteredMaxZ() << std::endl;
-
-            PointSetModel model(bead_radius, 2*kde.getCenteredMaxX(), 2*kde.getCenteredMaxY(), 2*kde.getCenteredMaxZ());
-
-            kde.createKDE(&model);
-
-            return SUCCESS;
-        }
+//        if (vm["KDEmap"].as<bool>()){
+//            std::cout << "  => creating KDE map " << std::endl;
+//            std::vector<std::string> datfiles = vm["dat"].as<std::vector<std::string> >();
+//            PofRData data(datfiles[0], false);
+//
+//            bead_radius = (float)(0.4999999f * (data.getBinWidth())); // half bin width
+//
+//            if (toppercent < 0.001){
+//                throw std::invalid_argument("** ERROR => TOPPERCENT : TOO SMALL MUST BE GREATER THAN 0.001 : " + std::to_string(toppercent) );
+//            }
+//
+//            KDE kde(fileList, bead_radius, toppercent);
+//            std::cout << " BOUNDING BOX X " << kde.getCenteredMaxX() << std::endl;
+//            std::cout << " BOUNDING BOX Y " << kde.getCenteredMaxY() << std::endl;
+//            std::cout << " BOUNDING BOX Z " << kde.getCenteredMaxZ() << std::endl;
+//
+//            PointSetModel model(bead_radius, 2*kde.getCenteredMaxX(), 2*kde.getCenteredMaxY(), 2*kde.getCenteredMaxZ());
+//
+//            kde.createKDE(&model);
+//
+//            return SUCCESS;
+//        }
 
 
         /*
@@ -289,7 +290,7 @@ int main(int argc, char** argv) {
          */
         if (vm["cemap"].as<bool>()){
 
-            std::cout << "  => creating KDE CE map " << std::endl;
+            std::cout << "  => creating CE Density Map " << std::endl;
             std::vector<std::string> datfiles = vm["dat"].as<std::vector<std::string> >();
 
             IofQData iofqdata = IofQData(datfiles[0], false);
@@ -305,20 +306,14 @@ int main(int argc, char** argv) {
             //dm.setBessels(iofqdata_bsa.getQvalues());
             //dm.calculateDensityCoefficientAtLMR();
             //int totalroounds = dm.getTotalCenteredCoordinates()*10/0.01;
-
 //            dm.openMP();
+            if (toppercent < 0.001){
+                throw std::invalid_argument("** ERROR => TOPPERCENT : TOO SMALL MUST BE GREATER THAN 0.001 : " + std::to_string(toppercent) );
+            }
 
-    dm.refineModel(50, toppercent, highTempRounds,
+    dm.refineModel(multiple, toppercent, highTempRounds,
                    const_cast<std::vector<Datum> &>(iofqdata.getWorkingSet()),
                    const_cast<std::vector<Datum> &>(iofqdata.getWorkingSetSmoothed()));
-
-
-//            auto qvalues = iofqdata_bsa.getQvalues();
-//            int total_in = qvalues.size();
-//
-//            for(int i=0; i<total_in; i++){
-//                std::cout << i << " " << qvalues[i] << " " << dm.calculateIntensityAtQ(i) << std::endl;
-//            }
 
 
 return 1;
@@ -326,43 +321,33 @@ return 1;
             PofRData data(datfiles[0], false);
             bead_radius = (float)(0.4999999999 * (data.getBinWidth()));
 
-            if (toppercent < 0.001){
-                throw std::invalid_argument("** ERROR => TOPPERCENT : TOO SMALL MUST BE GREATER THAN 0.001 : " + std::to_string(toppercent) );
-            }
-
             KDE kde(fileList, bead_radius, toppercent);
 
             logger("Distribution-based lattice ", std::to_string(bead_radius));
 
-            if (sym.compare("C1") != 0) {
-                if (std::regex_match(sym, std::regex("(C|D)[0-9]+", ECMAScript | icase))) {
-                    // make an offset bound box based
-                    PointSetModel model(kde.getAverageDmin(), kde.getMinx(), kde.getMiny(), kde.getMinz(), kde.getMaxx(), kde.getMaxy(), kde.getMaxz(), sym);
-//                    if (isSeeded){ // if refined model is available, use to bias initial map
-//                        kde.add_prior(seedFile);
-//                    }
-                    kde.map_refineSym(&model, &data, prefix);
-//                    if (vm.count("updateCD")){
-//                        mainAnneal.updateContactsDistributionToFile(vm["updateCD"].as<std::string>());
-//                    }
-                    return SUCCESS;
-                } else if (std::regex_match(sym, std::regex("X[0-9]+", ECMAScript | icase))){
-
-                }
-
-            } else {
-                // create my universe using a spacing based on
-                //float kde_bead_radius = (bead_radius - kde.getDminStDev());
-                float kde_bead_radius = 0.75f*bead_radius;
-
-                PointSetModel model(kde_bead_radius, 2*kde.getCenteredMaxX(), 2*kde.getCenteredMaxY(), 2*kde.getCenteredMaxZ());
-                if (isSeeded){ // if refined model is available, use to bias initial map
-                    kde.add_prior(seedFile);
-                }
-                kde.map_refine(&model, &data, prefix);
-
-                return SUCCESS;
-            }
+//            if (sym.compare("C1") != 0) {
+//                if (std::regex_match(sym, std::regex("(C|D)[0-9]+", ECMAScript | icase))) {
+//                    // make an offset bound box based
+//                    PointSetModel model(kde.getAverageDmin(), kde.getMinx(), kde.getMiny(), kde.getMinz(), kde.getMaxx(), kde.getMaxy(), kde.getMaxz(), sym);
+//                    kde.map_refineSym(&model, &data, prefix);
+//                    return SUCCESS;
+//                } else if (std::regex_match(sym, std::regex("X[0-9]+", ECMAScript | icase))){
+//
+//                }
+//
+//            } else {
+//                // create my universe using a spacing based on
+//                //float kde_bead_radius = (bead_radius - kde.getDminStDev());
+//                float kde_bead_radius = 0.75f*bead_radius;
+//
+//                PointSetModel model(kde_bead_radius, 2*kde.getCenteredMaxX(), 2*kde.getCenteredMaxY(), 2*kde.getCenteredMaxZ());
+//                if (isSeeded){ // if refined model is available, use to bias initial map
+//                    kde.add_prior(seedFile);
+//                }
+//                kde.map_refine(&model, &data, prefix);
+//
+//                return SUCCESS;
+//            }
         }
 
 
