@@ -164,8 +164,8 @@ DensityMapper::DensityMapper(std::string filename, float qmax, float sampling_fr
 
     //set GPU
 
-    createSphericalFibonacciLattice();
-    setModel();
+//    createSphericalFibonacciLattice();
+//    setModel();
 }
 
 
@@ -1401,7 +1401,7 @@ void DensityMapper::populateICalc(unsigned int total_q, std::vector<float> & iCa
     auto end_N = (unsigned int)std::floor(total_width/window);
     unsigned int start_of_tail = end_N*window;
 
-    simde__m128 mmSum1, mmSum2, v0, v1, v2, v3, s01, s23;
+    simde__m128 mmSum1, mmSum2, v0, v1, v2, v3;//, s01, s23;
 //    simde__m256 mmSum1, mmSum2; // vector of 8 floating point numbers
 
     float icalc_sse[4]; // size is 4 for m128 and 8 for m256
