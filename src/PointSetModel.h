@@ -34,6 +34,7 @@ class SubUnit;
 class Anneal;
 
 class PointSetModel {
+
     float radius_of_universe, bead_radius, cutOffNeighbor;
     float xaxis, yaxis, zaxis;
     float inv_bead_radius, helicalVolume;
@@ -80,6 +81,7 @@ public:
     PointSetModel(float beadradius, float height, float radius); // cylinder no symmetry
     PointSetModel(std::string maskfile, float searchSpace, float beadradius); // masked search space
     PointSetModel(float beadradius, float xmin, float ymin, float zmin, float xmax, float ymax, float zmax, std::string sym);
+    PointSetModel(std::vector<vector3> &centered_coordinates, float searchSpace, float beadradius);
     PointSetModel(std::string maskfile, float searchSpace, float beadradius, std::string sym, bool maskIt);
 
     Bead * getBead(int i) { return &beads[i];}

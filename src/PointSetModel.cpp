@@ -287,6 +287,26 @@ PointSetModel::PointSetModel(std::string helicalfile, float beadradius){
 
 }
 
+PointSetModel::PointSetModel(std::vector<vector3> & centered_coordinates, float searchSpace, float beadradius) :
+radius_of_universe(searchSpace*0.5f),
+bead_radius(beadradius),
+cutOffNeighbor(2.001f*bead_radius) {
+
+    radial_limit = std::ceil(radius_of_universe/bead_radius)*bead_radius;
+
+    inv_bead_radius = 1.0f/bead_radius;
+    bead_volume = (float)(4.0f/3.0f*bead_radius*bead_radius*bead_radius*M_PI); // 4/3*PI*r^3
+
+    beads.clear();
+    for(auto & vec : centered_coordinates){
+        beads.emplace_back(Bead(vec.x, vec.y, vec.z, 1));
+    }
+
+    // create neighborhoods for the points
+    this->createDistancesAndConvertToSphericalCoordinates();
+
+}
+
 PointSetModel::PointSetModel(std::string maskfile, float searchSpace, float beadradius) : radius_of_universe(searchSpace*0.5f), bead_radius(beadradius), cutOffNeighbor(2.001f*bead_radius) {
 
     radial_limit = std::ceil(radius_of_universe/bead_radius)*bead_radius;
