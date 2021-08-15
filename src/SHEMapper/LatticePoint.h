@@ -30,11 +30,10 @@
 class LatticePoint {
     int index, bins;
 
-    float sigma;
     std::vector<float> amplitudes;
     std::vector<unsigned int> occurences;
     std::vector<float> probabilities;
-    float prior_amplitude;
+    float weighted_amplitude;
     int total_amplitudes;
 
 public:
@@ -71,10 +70,14 @@ public:
     }
 
     void setWeightedAmplitude(){
-        prior_amplitude=0;
+        weighted_amplitude=0;
         for(int i=0; i<total_amplitudes; i++){
-            prior_amplitude += probabilities[i]*amplitudes[i];
+            weighted_amplitude += probabilities[i] * amplitudes[i];
         }
+    }
+
+    float getWeightedAmplitude(){
+        return weighted_amplitude;
     }
 
     float CDF(float value);
