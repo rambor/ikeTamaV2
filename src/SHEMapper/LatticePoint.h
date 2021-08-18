@@ -55,7 +55,14 @@ public:
 
     float getProbability(int index);
 
-    float getMostProbableAmplitude(){
+    void resetProbabilities(){
+        float prob = 1.0f/(float)total_amplitudes;
+        for(auto & pp : probabilities){
+            pp = prob;
+        }
+    }
+
+    float getMostProbableAmplitude() const {
         float temp, max = probabilities[0];
         int selected=0;
         for(int i=1; i<total_amplitudes; i++){
@@ -69,6 +76,18 @@ public:
         return amplitudes[selected];
     }
 
+    float getMaxProbability() const {
+        float temp, max = probabilities[0];
+        for(int i=1; i<total_amplitudes; i++){
+            temp = probabilities[i];
+            if (max < temp){
+                max = temp;
+            }
+        }
+
+        return max;
+    }
+
     void setWeightedAmplitude(){
         weighted_amplitude=0;
         for(int i=0; i<total_amplitudes; i++){
@@ -78,6 +97,10 @@ public:
 
     float getWeightedAmplitude(){
         return weighted_amplitude;
+    }
+
+    float getLastAmplitude(){
+        return amplitudes[amplitudes.size()-1];
     }
 
     float CDF(float value);

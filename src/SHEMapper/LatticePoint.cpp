@@ -59,10 +59,7 @@ LatticePoint::LatticePoint(int index, int bins) : index(index), bins(bins) {
     probabilities.resize(total_amplitudes);
     occurences.resize(total_amplitudes);
 
-    float prob = 1.0f/(float)total_amplitudes;
-    for(auto & pp : probabilities){
-        pp = prob;
-    }
+    this->resetProbabilities();
 
     this->setWeightedAmplitude();
 }
