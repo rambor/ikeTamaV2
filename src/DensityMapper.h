@@ -88,7 +88,7 @@ class DensityMapper {
     float * debye_factors;
     //aligned_vector debye_factors;
 
-    PointSetModel modelDensityHCP;
+    PointSetModel modelDensityHCP, inputBaseModel;
 
     std::vector<Shell> shells;
     std::vector<LatticePoint> lattice_points;
@@ -170,7 +170,11 @@ public:
     float getChiSquare(unsigned int total, float scale, float *const pICalc, float *const pSigma,
                        Datum *const pWorkingSet, Datum *const pWorkingSetSmoothed, float * const res);
 
-    void writeICalc(unsigned int total, float scale, float *const pICalc, Datum *const pWorkingSet, std::string name);
+    void writeICalc(unsigned int total, float scale,
+                    float *const pICalc,
+                    Datum *const pWorkingSet,
+                    Datum * const pWorkingSetSmoothed,
+                    std::string name);
 
     float calculateDurbinWatson(unsigned int total, float * const residuals);
 
