@@ -687,7 +687,7 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
             EulerTour tour = EulerTour(selected_indices, &inputBaseModel);
             unsigned int total_tours = tour.getNumberOfComponents();
 
-            int total_reset=0;
+            unsigned int total_reset=0;
             if (total_tours > 1){
                 auto pTour = tour.getPointerToLargestTour();
                 std::set<unsigned int> nodestokeep;
@@ -702,7 +702,7 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
                     }
                 }
             }
-            std::cout << " Total Nodes Reset : " << total_reset << std::endl;
+            logger("Flattening", formatNumber(total_reset));
 
 
 //
