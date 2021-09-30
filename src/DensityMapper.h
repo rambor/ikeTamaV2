@@ -22,10 +22,10 @@
 
 #include <math.h>
 #include <random>
-#include <sastools/include/Datum.h>
+#include <sastools/Datum.h>
 #include <Eigen/Core>
-#include <sastools/include/simde-no-tests-master/simde-arch.h>
-#include <sastools/include/simde-no-tests-master/simde-common.h>
+#include <sastools/simde-no-tests-master/simde-arch.h>
+#include <sastools/simde-no-tests-master/simde-common.h>
 
 #ifdef __APPLE__ //Mac OSX has a different name for the header file
     #include <OpenCL/opencl.h>
@@ -35,15 +35,15 @@
 
 #include <string>
 #include <vector>
-#include <sastools/include/vector3.h>
+#include <sastools/vector3.h>
 #include "SHEMapper/Shell.h"
 #include "boost/math/special_functions/bessel.hpp"
 #include "SHEMapper/LatticePoint.h"
 #include "PointSetModel.h"
 #include "SHEMapper/Neighbors.h"
 #include <iostream>
-#include <sastools/include/PDBModel.h>
-#include <sastools/include/utils.h>
+#include <sastools/PDBModel.h>
+#include <sastools/utils.h>
 #include <cstdlib>
 
 // #include <boost/math/special_functions/spherical_harmonic.hpp

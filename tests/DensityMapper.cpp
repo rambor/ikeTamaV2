@@ -17,7 +17,7 @@
 // 
 //
 #include <support.hpp>
-#include <sastools/include/IofQData.h>
+#include <sastools/IofQData.h>
 #include "gtest/gtest.h"
 #include "../src/DensityMapper.cpp"
 #include "../src/SHEMapper/Shell.cpp"

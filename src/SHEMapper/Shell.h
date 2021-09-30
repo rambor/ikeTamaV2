@@ -21,7 +21,7 @@
 #define IKETAMA_SHELL_H
 
 
-#include <sastools/include/vector3.h>
+#include <sastools/vector3.h>
 #include <boost/math/special_functions/spherical_harmonic.hpp>
 #include <iostream>
 #include <math.h>

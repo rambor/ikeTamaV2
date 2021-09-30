@@ -16,9 +16,9 @@
 //
 
 
-#include <sastools/include/utils.h>
+#include <sastools/utils.h>
 #include <cfloat>
-#include <sastools/include/PDBModel.h>
+#include <sastools/PDBModel.h>
 #include "PointSetModel.h"
 
 /**
@@ -301,7 +301,7 @@ cutOffNeighbor(2.001f*bead_radius) {
     for(auto & vec : centered_coordinates){
         beads.emplace_back(Bead(vec.x, vec.y, vec.z, 1));
     }
-
+    number_of_beads = beads.size();
     // create neighborhoods for the points
     this->createDistancesAndConvertToSphericalCoordinates();
 

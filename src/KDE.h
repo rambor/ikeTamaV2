@@ -25,8 +25,8 @@
 #include <string>
 #include <vector>
 #include <algorithm>
-#include <sastools/include/vector3.h>
-#include <sastools/include/PDBModel.h>
+#include <sastools/vector3.h>
+#include <sastools/PDBModel.h>
 #include <boost/regex.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/classification.hpp>

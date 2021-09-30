@@ -24,7 +24,7 @@
 #include <random>
 #include <string>
 #include <vector>
-#include <sastools/include/vector3.h>
+#include <sastools/vector3.h>
 
 
 class LatticePoint {

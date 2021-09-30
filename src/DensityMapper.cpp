@@ -69,8 +69,22 @@ DensityMapper::DensityMapper(std::string filename, float qmax, float sampling_fr
     dmin_infimum = dmin_values.dmin_infimum;
     average_dmin = dmin_values.average_dmin;
     stdev_dmin = dmin_values.stdev_dmin;
+//    fwhm_sigma = cutoff*sqrtf(3.0f/8.0f); // seems to converge quickly
+//    fwhm_sigma = cutoff*1.2f/2.355f; // => 0.50955;
+    fwhm_sigma = cutoff*0.49; // => 0.50955;
+    //fwhm_sigma = cutoff*sqrtf(3.0f/8.0f) + 0.25*delta_r;
+    /*
+     * cutoff*sqrtf(3.0f/8.0f) + 0.25*delta_r seems to converge quickly, if too large convergence is longer and
+     * model is smoother.
+     */
 
-    fwhm_sigma = 1.5f*cutoff/2.355f; //1.2f*cutoff/2.355f; // using the formula fwhm = 2.355*sigma which should account for 76% area in distribution
+    /*
+     * 1/2.355 => 0.424
+     * sqrt(3/8) => 0.612
+     * 1.2/2.355 => 0.51
+     * 1.1/2.355 => 0.467
+     */
+    //fwhm_sigma = 1.00f*cutoff/2.355f; //1.2f*cutoff/2.355f; // using the formula fwhm = 2.355*sigma which should account for 76% area in distribution
 
     logger("dmin SUPREMUM", formatNumber(dmin_supremum,2));
     logger("dmin INFINUM", formatNumber(dmin_infimum, 2));
@@ -86,9 +100,9 @@ DensityMapper::DensityMapper(std::string filename, float qmax, float sampling_fr
         amp = 1.0;
     }
 
-    inputBaseModel = PointSetModel(centered_coordinates, 2.1*sqrt(max_r), dmin_supremum*0.5);
+    // use PointSetModel to make neighborhood for each point in centered coordinates
+    inputBaseModel = PointSetModel(centered_coordinates, 2.1f*sqrtf(max_r), dmin_supremum*0.5);
     // for each r_value, I can calculate a sphere of specific area :: 4*PI*r^2
-
 
 //    std::vector<cl::Platform> all_platforms;
 //    cl::Platform::get(&all_platforms);
@@ -264,7 +278,7 @@ float DensityMapper::populateDensities(std::vector<float> & amplitudesT, std::ve
             amplitude_r_i += pAmp[model_neighbors[n]] * model_kernel_distances[n];
         } // pAmp is same length as input PDB model
         sum += amplitude_r_i;
-        pDen[i] = amplitude_r_i;
+        pDen[i] = amplitude_r_i/(float)totalNeighbors;
     }
 
 
@@ -1001,12 +1015,12 @@ void DensityMapper::createXPLORMap(std::string name){
 
     float average = (mapSumSquared/mapCount);
     float stdev = std::sqrt(mapSumSquared/mapCount - ave*ave);
-    float aboveit = average + 4.0f*stdev;
+    float aboveit = average + 3.0f*stdev;
 
     int index = 1;
     for(int i=0; i<averages.size(); i++){
         float value = averages[i];
-        if(value > aboveit){ // print
+        if(value >= aboveit){ // print
             vector3 & vec = coords_averages[i];
             std::snprintf(buffer, 80, "%-6s%5i %4s %3s %1s%4i    %8.3f%8.3f%8.3f  1.00%5.2f\n", "ATOM", 1," CA ", "ALA", "A", index, vec.x, vec.y, vec.z, value );
             tempHeader.append(buffer);
@@ -1074,7 +1088,7 @@ void DensityMapper::createXPLORMap(std::string name){
     index = 1;
     for(int i=0; i<averages.size(); i++){
         float value = averages[i];
-        if(value > aboveit){ // print
+        if(value >= aboveit){ // print
             vector3 & vec = coords_averages[i];
             std::snprintf(buffer, 80, "%-6s%5i %4s %3s %1s%4i    %8.3f%8.3f%8.3f  1.00%5.2f\n", "ATOM", 1," CA ", "ALA", "A", index, -vec.x, vec.y, vec.z, value );
             tempHeader.append(buffer);
@@ -1082,7 +1096,7 @@ void DensityMapper::createXPLORMap(std::string name){
         }
     }
     tempHeader.append("END\n");
-    out = name+"filtered_flipped.pdb";
+    out = name+"_filtered_flipped.pdb";
     outputFileName = out.c_str();
 
     pFile = fopen(outputFileName, "w");
@@ -1137,7 +1151,6 @@ void DensityMapper::writeLatticePoints(std::string name){
 
 void DensityMapper::createHCPGrid(){
     // read in pdb file
-
     modelDensityHCP = PointSetModel((2*kmax), delta_r); // grid is more closely spaced than input model
 
     const float beadradius_limit = (delta_r*std::sqrt(3.0f/2.0f));

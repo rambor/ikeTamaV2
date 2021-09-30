@@ -22,8 +22,8 @@
 #include <string>
 #include <iostream>
 #include <algorithm>
-#include "sastools/include/vector3.h"
-#include "sastools/include/Bead.h"
+#include "sastools/vector3.h"
+#include "sastools/Bead.h"
 #include "PointSetModel.h"
 #include <random>
 

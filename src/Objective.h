@@ -22,10 +22,10 @@
 #include <math.h>
 #include <regex>
 #include <iostream>
-#include "sastools/include/DataBase.h"
-#include "sastools/include/PofRData.h"
-#include "sastools/include/IofQData.h"
-#include "sastools/include/Utils.h"
+#include "sastools/DataBase.h"
+#include "sastools/PofRData.h"
+#include "sastools/IofQData.h"
+#include "sastools/Utils.h"
 
 class Objective {
     // HASH KEY => DATA

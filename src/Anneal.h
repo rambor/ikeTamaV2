@@ -32,7 +32,7 @@
 #include "KDE.h"
 #include "../EulerTour/EulerTour.h"
 #include "Component.h"
-#include <sastools/include/utils.h>
+#include <sastools/utils.h>
 
 #ifdef __cplusplus
 extern "C" {

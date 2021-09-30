@@ -25,7 +25,7 @@
 #include <iostream>
 #include <set>
 #include "../EulerTour/EulerTour.h"
-#include <sastools/include/Bead.h>
+#include <sastools/Bead.h>
 #include "PointSetModel.h"
 
 #ifdef __cplusplus

@@ -22,8 +22,8 @@
 #include <math.h>
 #include <regex>
 #include <iostream>
-#include <sastools/include/Bead.h>
-#include <sastools/include/PofRData.h>
+#include <sastools/Bead.h>
+#include <sastools/PofRData.h>
 #include <boost/regex.hpp>
 #include <boost/algorithm/string.hpp>
 #include <set>
