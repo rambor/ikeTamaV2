@@ -69,13 +69,16 @@ DensityMapper::DensityMapper(std::string filename, float qmax, float sampling_fr
     dmin_infimum = dmin_values.dmin_infimum;
     average_dmin = dmin_values.average_dmin;
     stdev_dmin = dmin_values.stdev_dmin;
-//    fwhm_sigma = cutoff*sqrtf(3.0f/8.0f); // seems to converge quickly
+//    fwhm_sigma = cutoff*sqrtf(3.0f/8.0f); // => 0.61 seems to converge quickly
 //    fwhm_sigma = cutoff*1.2f/2.355f; // => 0.50955;
-    fwhm_sigma = cutoff*0.49; // => 0.50955;
+    fwhm_sigma = cutoff*0.5712;//424; // => 0.50955;
+
     //fwhm_sigma = cutoff*sqrtf(3.0f/8.0f) + 0.25*delta_r;
     /*
      * cutoff*sqrtf(3.0f/8.0f) + 0.25*delta_r seems to converge quickly, if too large convergence is longer and
      * model is smoother.
+     *
+     * if fwhm is too small, like 0.2*cutoff, each point in Nyquist grid acts independent
      */
 
     /*
@@ -407,7 +410,6 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
     topTrials.reserve(topN);
     topTrials.resize(topN);
 
-
     const unsigned int last = topN-1;
 
     std::vector<float> qvalues;
@@ -685,11 +687,11 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
         /*
          * reset models per round to base value after 3 rounds
          */
-        if (round > 3 && models_per_round >= base_models_per_round){
+        if (round == 4 && models_per_round >= base_models_per_round){
             models_per_round = base_models_per_round;
         }
 
-        if (round < 5 ){ // reset amplitudes for anything isolated
+        if (round < 0 ){ // reset amplitudes for anything isolated
             selected_indices.clear();
 
             for(int i=0; i < total_amplitudes_from_lattice_points; i++){
@@ -717,7 +719,6 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
                 }
             }
             logger("Flattening", formatNumber(total_reset));
-
 
 //
 //            // check selected indices and penalize any that are isolated
@@ -1155,13 +1156,13 @@ void DensityMapper::createHCPGrid(){
 
     const float beadradius_limit = (delta_r*std::sqrt(3.0f/2.0f));
 
-    float inv_sigma = 1.0f/(2.0f*fwhm_sigma*fwhm_sigma);
-    float inv_sqrt = 1.0f/(fwhm_sigma*sqrtf(2.0f*M_PI));
+    float inv_sigma = 0.5f/(fwhm_sigma*fwhm_sigma);
+    float inv_sqrt = 1.0f;//(fwhm_sigma*sqrtf(2.0f*M_PI));
 
     auto totalBeads = modelDensityHCP.getTotalNumberOfBeadsInUniverse();
 
     vector3 * tempvec;
-
+    // keep lattice points that overlap with input bead model
     for(unsigned int i=0; i < totalBeads; i++){
         auto bead = modelDensityHCP.getBead(i);
         auto bead_vec = bead->getVec();
