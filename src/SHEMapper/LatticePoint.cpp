@@ -24,43 +24,29 @@
 
 LatticePoint::LatticePoint(int index, int bins) : index(index), bins(bins) {
 
-    float delta = 1.0f/(float)bins;
+//    float delta = 1.0f/(float)bins;
+//    for (int i=0; i<bins; i++){
+//        amplitudes.push_back(i*delta);
+//    }
 
-    for (int i=0; i<bins; i++){
-        amplitudes.push_back(i*delta);
-    }
-    amplitudes[0] = 0.0f;
-    amplitudes.push_back(1.0f);
+    amplitudes.resize(bins);
 
-//    amplitudes[0] = -0.1f;
-//    amplitudes[1] = 0.233f;
-//    amplitudes[2] = 0.47f;
-//    amplitudes[3] = 1.0f;
+    amplitudes[0] = -0.269f;
+    amplitudes[1] = 0.6345f;
+    amplitudes[2]=1.0f;
+
 
     // electron densities - nucleic, protein, lipid, and lipid subtracted water and divided by largest value
-    amplitudes[0] = -0.269f;
-    amplitudes[1] = 0.103f;
-    amplitudes[2] = 0.682543f;
-    amplitudes[3] = 1.0f;
-
-//    amplitudes[0] = 0.0f;
-//    amplitudes[1] = 0.013f; // lipoprotein
-//    amplitudes[2] = 0.086f; // protein
-//    amplitudes[3] = 0.126f; // nucleic
-
-    /*
-     * -0.1
-     *  0
-     *  0.2
-     *  0.4
-     */
+//    amplitudes[0] = -0.269f;
+//    amplitudes[1] = 0.103f;
+//    amplitudes[2] = 0.682543f;
+//    amplitudes[3] = 1.0f;
 
     total_amplitudes = amplitudes.size();
     probabilities.resize(total_amplitudes);
     occurences.resize(total_amplitudes);
 
     this->resetProbabilities();
-
     this->setWeightedAmplitude();
 }
 
