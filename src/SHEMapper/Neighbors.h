@@ -24,7 +24,7 @@
 
 class Neighbors {
 
-    unsigned int hcp_lattice_index;
+    unsigned int hcp_lattice_index, kept_index;
 
     std::vector<unsigned int> model_indices;
     std::vector<float> distances;
@@ -35,6 +35,7 @@ public:
     // copy constructor
     Neighbors(const Neighbors &n2){
         this->hcp_lattice_index = n2.hcp_lattice_index;
+        this->kept_index = n2.kept_index;
 
         for(auto & it : n2.model_indices){
             this->model_indices.push_back(it);
@@ -48,6 +49,7 @@ public:
     void swap(Neighbors & other) noexcept {
         using std::swap;
         other.hcp_lattice_index = hcp_lattice_index;
+        other.kept_index = kept_index;
         std::swap(model_indices, other.model_indices);
         std::swap(distances, other.distances);
     }
@@ -58,9 +60,9 @@ public:
         return *this;
     }
 
-
     Neighbors(Neighbors && other) noexcept  {
         hcp_lattice_index = other.hcp_lattice_index;
+        kept_index = other.kept_index;
         model_indices = std::move(other.model_indices);
         distances = std::move(other.distances);
     }
@@ -72,12 +74,20 @@ public:
         distances.push_back(distance);
     }
 
+    void clear_neighbors(){
+        model_indices.clear();
+        distances.clear();
+    }
+
     const unsigned int * getModelIndices(){ return model_indices.data();}
     const float * getModelDistances(){ return distances.data();}
 
     const unsigned int getTotalNeighbors() { return model_indices.size();}
 
-    const unsigned int getHCPLatticeIndex() { return hcp_lattice_index;}
+    unsigned int getHCPLatticeIndex() { return hcp_lattice_index;}
+
+    void setKeptIndex(unsigned int val){ kept_index = val;}
+    unsigned int getKeptIndex(){ return kept_index;}
 
 };
 

@@ -4,7 +4,7 @@ project(ikeTama)
 set(CMAKE_CXX_FLAGS_Release "${CMAKE_CXX_FLAGS_RELEASE} -Wall -g1 -DNDEBUG -O3 ")
 set(CMAKE_CXX_STANDARD 11)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -std=c++11 -pthread -ffast-math -I${CMAKE_CURRENT_SOURCE_DIR}/src/thirdparty")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native -mtune=native -pthread -ffast-math -fopenmp -I${CMAKE_CURRENT_SOURCE_DIR}/src/thirdparty")
 MESSAGE("** SYSTEM : ${CMAKE_SYSTEM_NAME}")
 
 

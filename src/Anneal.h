@@ -70,7 +70,7 @@ class Anneal {
 
     float percentAddRemove, beta, eta, lambda, alpha, mu, asaAcceptanceRate, complementASAAcceptanceRate, intASAAcceptanceRate, intComplementASAAcceptanceRate;
     float highT, highTempStartForCooling, interconnectivityCutOff;
-    double targetContacts=1.99;
+    double targetContacts=2.1;//79;
     unsigned int lowerV, upperV, highTempRounds, ccmultiple;
     bool isRefine=false;
 
@@ -423,66 +423,16 @@ public:
    */
     inline double calculateAvgContactsPotential(std::vector<unsigned int> &binCount, unsigned int wl) {
 
-        double avgCon = 2.0d*binCount[0]/(float)wl;
-        double baseline = 0.0000001;
-
-        double diff = 0;
-//        diff = (avgCon-targetContacts);
-//        diff *= diff;
-
-//        double bfactor = -0.3719;
-//        diff = 1.0 - std::exp(-bfactor*(avgCon-targetContacts));
-//        diff *= diff;
-//        diff *= 0.00001;
-
-        //diff += baseline;
+        double avgCon = 2.0*binCount[0]/(float)wl;
+        double diff = 10.0*exp(-avgCon/1.7);
 
 //        if (avgCon < targetContacts){ // lower bound, can't be less than
 //            diff = (avgCon-targetContacts);
 //            diff *= diff;
-//            diff += baseline;
 //        } else {
-//            double slope = (0.0000001d - 1.0d)*baseline/(12.0 - targetContacts); // drop tenth of baseline over 12 units
-//            double intercept = baseline - slope*targetContacts;
-//            diff = slope*avgCon + intercept;
+//            diff = 0;
 //        }
 
-
-//        if (avgCon < targetContacts){ // lower bound, can't be less than
-//            diff = (avgCon-targetContacts);
-//            diff *= diff;
-//            diff += baseline;
-//        } else {
-//            double slope = 0.001d*baseline/(12.0 - targetContacts); // drop tenth of baseline over 12 units
-//            double intercept = baseline - slope*targetContacts;
-//            diff = slope*avgCon + intercept;
-//        }
-
-
-
-//        double upperlimit = 5.1;
-//        if (avgCon < targetContacts){ // lower bound, can't be less than
-//            diff = (avgCon-targetContacts);
-//            diff *= diff;
-//            diff += baseline;
-//        } else if (avgCon > upperlimit){
-//            diff = (avgCon-upperlimit);
-//            diff *= diff;
-//            diff += baseline;
-//        } else {
-//            diff += baseline;
-//        }
-
-
-//        if (avgCon > targetContacts){ // upper bound on contacts, can't be any greater than target
-//            diff = (avgCon-targetContacts);
-//            diff *= diff;
-//            diff += baseline;
-//        } else {
-//            double delta = 0.0001;
-//            double slope = delta*baseline/targetContacts; // increase by tenth of baseline
-//            diff = slope*avgCon + (1.0 - delta)*baseline;
-//        }
 
         return diff;
     }
@@ -515,40 +465,7 @@ public:
             diff = slope*avgCon + intercept;
         }
 
-//        for (unsigned int i=0; i < distributionlimit; i++){
-//            // i know every value in working_probability up to zeroBin is nonzero
-//            double prob = contactsDistribution[i];  // bounded by experimental Shannon Number
-//            double tempvalue = distribution[i];
-//            if (prob > 0){
-//                if (tempvalue > 0){
-//                    kl += prob * std::log(prob / tempvalue * totalCounts);
-//                } else { // if tempvalue is Zero (empty)
-//                    kl += 1.1;
-//                }
-//            }
-//        }
-
-//        double percent = distribution[1]/totalCounts;
-        double diff2 = 0;//distribution[1]/totalCounts - contactsDistribution[1]; // number of beads that are single connected
-
-        for(unsigned int i=5; i< 13; i++){
-            diff2 += distribution[i]/totalCounts;
-        }
-
-//        return diff*diff;
-//         can't be any more than
-//        if (percent > contactsDistribution[1]){
-//            double difft = percent - contactsDistribution[1];
-//            diff2 = difft*difft + 1.1*baseline;
-//        } else {
-//            double slope = 0.1*baseline/contactsDistribution[1]; // increase by tenth of baseline
-//            diff2 = (slope*percent + baseline);
-//        }
-
-        //return kl;
-        //return morse*morse;
-        return diff2*diff2;
-        //return diff;
+        return diff;
     }
 
     /**

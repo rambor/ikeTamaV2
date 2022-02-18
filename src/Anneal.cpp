@@ -54,21 +54,21 @@ Anneal::Anneal(float highT,
      * this distribution is set to q-max 0.4 and bead_radius = 0.5*bin_width
      */
     distributionlimit=13;
-    contactsDistribution[0] = 0.0d;
+    contactsDistribution[0] = 0.0;
 //    contactsDistribution[1] = 0.25419d;
-    contactsDistribution[1] = 0.27d;
-    contactsDistribution[2] = 0.43d;
+    contactsDistribution[1] = 0.27;
+    contactsDistribution[2] = 0.43;
 //    contactsDistribution[2] = 0.317564d;
-    contactsDistribution[3] = 0.241696d;
-    contactsDistribution[4] = 0.117231d;
-    contactsDistribution[5] = 0.0447598d;
-    contactsDistribution[6] = 0.0190639d;
-    contactsDistribution[7] = 0.00549451d;
-    contactsDistribution[8] = 0.0d;
-    contactsDistribution[9] = 0.0d;
-    contactsDistribution[10] = 0.0d;
-    contactsDistribution[11] = 0.0d;
-    contactsDistribution[12] = 0.0d;
+    contactsDistribution[3] = 0.241696;
+    contactsDistribution[4] = 0.117231;
+    contactsDistribution[5] = 0.0447598;
+    contactsDistribution[6] = 0.0190639;
+    contactsDistribution[7] = 0.00549451;
+    contactsDistribution[8] = 0.0;
+    contactsDistribution[9] = 0.0;
+    contactsDistribution[10] = 0.0;
+    contactsDistribution[11] = 0.0;
+    contactsDistribution[12] = 0.0;
 
     double totaltemp = 0;
     for(unsigned int i=0; i<distributionlimit; i++){

@@ -154,6 +154,165 @@ TEST_F(DensityMapperTest, testerTest){
     ASSERT_EQ(23, dm.getTotalShells());
 }
 
+
+TEST_F(DensityMapperTest, updateDensityTest){
+    float sampling = 2.5;
+
+    IofQData iofqdata_bsa = IofQData(iofqdata_filename, false);
+    iofqdata_bsa.extractData();
+    iofqdata_bsa.makeWorkingSet();
+    auto workingset = iofqdata_bsa.getWorkingSet();
+
+    float qmax = iofqdata_bsa.getQmax();
+
+    DensityMapper dm(bsa_test_model, qmax, sampling);
+
+    std::vector<Datum> & workingSet = const_cast<std::vector<Datum> &>(iofqdata_bsa.getWorkingSet());
+    std::vector<Datum> & workingSetSmoothed = const_cast<std::vector<Datum> &>(iofqdata_bsa.getWorkingSetSmoothed());
+
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_real_distribution<> distribution(0.0,1.0);
+
+    const unsigned int total_data = workingSet.size();
+    Datum * const pWorkingSet = workingSet.data();
+    Datum * const pWorkingSetSmoothed = workingSetSmoothed.data();
+    std::vector<float> i_calc(total_data);
+    std::vector<float> residuals(total_data);
+    std::vector<float> qvalues;
+    std::vector<float> sigmas_squared;
+
+    for(auto & datum : workingSet){
+        qvalues.push_back(datum.getQ());
+        sigmas_squared.push_back(1.0f/(datum.getSigma()*datum.getSigma()));
+    }
+
+    auto & lattice_points = dm.getLatticePoints();
+    const LatticePoint * pLattice = lattice_points.data();
+    auto total_lattice_points = lattice_points.size();
+
+    std::vector<float> amplitudes;
+    amplitudes.resize(total_lattice_points); // holds the amplitudes in use
+
+
+    unsigned int total_amplitudes_per_lattice_point = lattice_points[0].getTotalAmplitudes();
+    std::vector<unsigned int> selectedIndices(total_lattice_points);
+    std::vector<unsigned int> lattice_indices(total_lattice_points);
+    std::uniform_int_distribution<unsigned int> randomAmpIndex(0,total_amplitudes_per_lattice_point-1); // guaranteed unbiased
+    std::uniform_int_distribution<unsigned int> randomLatticePt(0,total_lattice_points-1); // guaranteed unbiased
+
+    std::vector<unsigned int> amplitude_indices(total_amplitudes_per_lattice_point);
+    for(unsigned int i=0; i<total_amplitudes_per_lattice_point; i++){
+        amplitude_indices[i] = i;
+    }
+
+    unsigned int amp_index, amp_index2, selected_lattice_pt, selected_lattice_pt2;
+    std::vector<float> prior_model_amplitudes(total_lattice_points);
+
+    // set up initial random density model
+    float * const pPriors = prior_model_amplitudes.data();
+    float * const pAmp = amplitudes.data();
+
+    for(int i=0; i < total_lattice_points; i++){
+        pPriors[i] = pLattice[i].getAmplitudeByIndex(randomAmpIndex(gen));
+        pAmp[i] = pPriors[i];
+        lattice_indices[i] = i;
+    }
+
+    dm.createHCPGrid();
+    unsigned int long totalKept = dm.getTotalKeptHCPSamplingPoints();
+    std::vector<float> hcp_electron_densities(totalKept);
+
+
+    // use aligned memory for squared amplitudes and debye_factors
+    auto * hcp_squared_amplitudes = (float *)_aligned_malloc(sizeof(float)*((totalKept*(totalKept-1)/2 + totalKept)), 16);
+    auto * testsquared_amplitudes = (float *)_aligned_malloc(sizeof(float)*((totalKept*(totalKept-1)/2 + totalKept)), 16);
+
+    //takes less than 100 usec
+    float ave = dm.populateDensities(prior_model_amplitudes, hcp_electron_densities);
+    dm.populateSquaredAmplitudes(totalKept, hcp_electron_densities, hcp_squared_amplitudes);
+    float ave2 = dm.populateDensities(prior_model_amplitudes, hcp_electron_densities);
+
+    std::clock_t startTime;
+    double runtime;
+
+    // make a change in prior and check that
+    /*
+     *
+     */
+    std::vector<unsigned int> indicesToModify(1);
+    for(int i=0; i<1000; i++){
+        selected_lattice_pt = randomLatticePt(gen);
+        indicesToModify[0] = selected_lattice_pt;
+
+        std::shuffle(amplitude_indices.begin(), amplitude_indices.end(), gen);
+        amp_index = amplitude_indices[0];
+//
+        float * pPrior = &pPriors[selected_lattice_pt];
+        *pPrior = pLattice[selected_lattice_pt].getAmplitudeByIndex(amp_index); // set new amplitudes
+
+        if ( fabs(pAmp[selected_lattice_pt] - *pPrior) < 0.0001f){ // make sure we pick a different value
+            amp_index = amplitude_indices[1];
+            *pPrior = pLattice[selected_lattice_pt].getAmplitudeByIndex(amp_index);
+        }
+
+        ave = dm.populateDensities(prior_model_amplitudes, hcp_electron_densities);
+        dm.populateSquaredAmplitudes(totalKept, hcp_electron_densities, testsquared_amplitudes);
+        dm.updateDensities(indicesToModify, prior_model_amplitudes, hcp_electron_densities, testsquared_amplitudes);
+//
+        for(unsigned int t=0; t < (totalKept*(totalKept-1)/2 + totalKept); t++){
+            std::string message = "Round " + std::to_string(i) + " " + std::to_string(t);
+            ASSERT_FLOAT_EQ(hcp_squared_amplitudes[t], testsquared_amplitudes[t]) << message;
+        }
+
+        // undo
+        *pPrior = pAmp[selected_lattice_pt]; // reverse change in prior_model_amplitude
+        dm.populateSquaredAmplitudes(totalKept, hcp_electron_densities, testsquared_amplitudes);
+       dm.updateDensities(indicesToModify, prior_model_amplitudes, hcp_electron_densities, testsquared_amplitudes);
+    }
+
+    std::cout << "finished " << std::endl;
+    _aligned_free(hcp_squared_amplitudes);
+    _aligned_free(testsquared_amplitudes);
+
+}
+
+TEST_F(DensityMapperTest, checkNeighbors){
+    float sampling = 2.5;
+    float qmax = 0.22;
+
+    DensityMapper dm(filtered, qmax, sampling);
+
+    // lattice_points should be filled along with neighbors
+
+    std::set<unsigned int> indices;
+
+    std::vector<LatticePoint> & pLats = dm.getLatticePoints();
+    std::vector<LatticePoint> omp_lattice_points(dm.getLatticePoints());
+
+
+
+    unsigned int total = pLats.size();
+    for(unsigned int i=0; i<total; i++){
+        indices.insert(i);
+    }
+
+    ASSERT_FALSE(dm.checkConnectivity(indices, omp_lattice_points));
+
+    // make connected set
+    std::set<unsigned int> connected;
+
+    for(auto & lat : pLats){
+        if (lat.getTotalNeighbors() > 0 && lat.getIndex() != 273 && lat.getIndex() != 277){
+            connected.insert(lat.getIndex());
+        }
+    }
+
+    ASSERT_TRUE(dm.checkConnectivity(connected, omp_lattice_points));
+
+}
+
 //TEST_F(DensityMapperTest, createHCPGrid){
 //
 //    float sampling = 2.35;

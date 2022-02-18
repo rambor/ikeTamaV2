@@ -211,6 +211,11 @@ public:
     }
 
     float getRadiusOfUniverse(){ return radius_of_universe;}
+
+    void clearNeighborsAndBins(){
+        bins.clear();
+        neighbors.clear();
+    }
 };
 
 

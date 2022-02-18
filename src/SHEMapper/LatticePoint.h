@@ -25,6 +25,7 @@
 #include <string>
 #include <vector>
 #include <sastools/vector3.h>
+#include <set>
 
 
 class LatticePoint {
@@ -33,19 +34,66 @@ class LatticePoint {
     std::vector<float> amplitudes;
     std::vector<unsigned int> occurences;
     std::vector<float> probabilities;
+    std::set<unsigned int> neighbors;
+
     float weighted_amplitude;
-    int total_amplitudes;
+    unsigned int total_amplitudes;
+public:
+    unsigned int getTotalAmplitudes() const;
+
+private:
+    unsigned int assigned_index;
 
 public:
     LatticePoint(int index, int bins);
+
+    // copy constructor
+    LatticePoint(const LatticePoint & dat) : index(dat.index), bins(dat.bins) {
+        this->amplitudes = dat.amplitudes;
+        this->occurences = dat.occurences;
+        this->probabilities = dat.probabilities;
+        this->neighbors = dat.neighbors;
+        this->weighted_amplitude = dat.weighted_amplitude;
+        this->total_amplitudes = dat.total_amplitudes;
+        this->assigned_index = dat.assigned_index;
+    }
+
+    LatticePoint & operator=(const LatticePoint & dataToCopy) {
+        if (this == &dataToCopy)
+            return *this;
+
+        LatticePoint tmp(dataToCopy); // make a copy
+        tmp.swap(*this);
+        return *this;
+    }
+
+    /**
+     * Rule of 3.5, define copy, destructor and assignment operator
+     * @param other
+     */
+    void swap(LatticePoint & other) {
+        other.index = index;
+        other.bins = bins;
+
+        other.amplitudes = std::move(amplitudes);
+        other.occurences = std::move(occurences);
+        other.probabilities = std::move(probabilities);
+        other.neighbors = std::move(neighbors);
+
+        other.weighted_amplitude = weighted_amplitude;
+        other.total_amplitudes = total_amplitudes;
+        other.assigned_index = assigned_index;
+    }
 
     void addToCounter(float value);
 
     float guessAmplitude(float rnd_number) const;
 
+    float getAmplitudeByIndex(unsigned int index) const { return amplitudes[index];}
+
     void resetCounter();
 
-    void updateProbabilities();
+    void updateProbabilities(float updateAlpha=0.67f);
 
     void printProbabilities();
 
@@ -80,7 +128,7 @@ public:
         float temp, max = probabilities[0];
         for(int i=1; i<total_amplitudes; i++){
             temp = probabilities[i];
-            if (max < temp){
+            if (temp > max){
                 max = temp;
             }
         }
@@ -95,7 +143,7 @@ public:
         }
     }
 
-    float getWeightedAmplitude(){
+    float getWeightedAmplitude() const {
         return weighted_amplitude;
     }
 
@@ -106,6 +154,33 @@ public:
     float CDF(float value);
 
     std::string getDetails();
+
+    void setRandomIndexForConvergence(){
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<unsigned int> randomIndex(0,total_amplitudes-1);
+        assigned_index = randomIndex(gen);
+    }
+
+    float getAssignedAmplitude() const {
+        return probabilities[assigned_index];
+    }
+
+    void updateOccurence(unsigned int indexToUpdate){
+        occurences[indexToUpdate] += 1;
+    }
+
+    void calculateProbabilitiesFromOccurrences();
+
+    void addNeighbor(unsigned int index);
+
+    unsigned int getTotalNeighbors(){ return neighbors.size();}
+
+    std::set<unsigned int> & getNeighbors(){ return neighbors;}
+
+    bool isNeighbor(unsigned int index){
+        return (neighbors.find(index) != neighbors.end());
+    }
 
 };
 

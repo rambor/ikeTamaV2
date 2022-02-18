@@ -1613,7 +1613,9 @@ std::string PointSetModel::createHeader(float dkl, Anneal * annealedObject, PofR
 
     tempHeader += "REMARK 265\n";
     tempHeader += "REMARK 265 SEARCH AND REFINEMENT CONSTRAINTS\n";
-
+    //REMARK 265  Dummy atom radius             :      2.900
+    std::snprintf(buffer, 80, "REMARK 265  Dummy atom radius             : %.3f\n", this->bead_radius);
+    tempHeader.append(buffer);
     std::snprintf(buffer, 80, "REMARK 265                   EDGE RADIUS : %.3f\n", this->bead_radius);
     tempHeader.append(buffer);
     std::snprintf(buffer, 80, "REMARK 265      AVG PTS HIGH TEMP SEARCH : %.1f\n", this->beadAverage);
@@ -2317,6 +2319,7 @@ void PointSetModel::createSeedFromPDB(std::string filename, PofRData * pData, un
     }
 
 
+    // check that no lattice point is isolated
     for(auto uni = uniqueIndices.begin(); uni != uniqueIndices.end(); ++uni){
         auto it = this->getPointerToNeighborhood(*uni);
         unsigned int neighborContacts = 0;
@@ -2338,6 +2341,7 @@ void PointSetModel::createSeedFromPDB(std::string filename, PofRData * pData, un
     std::copy(uniqueIndices.begin(), uniqueIndices.end(), seed_indices.begin());
     logger("TOTAL UNIQUE INDICES", formatNumber((unsigned int)seed_indices.size()));
     logger("TOTAL IN UNIVERSE", formatNumber(totalBeads));
+
     // make PDB P(r) for refining beadmodel
     double sum=0.0;
     for (unsigned int i=0; i<totalAtoms; i++){
@@ -2423,3 +2427,4 @@ std::string PointSetModel::writeModelToFileBare(float dkl, unsigned int workingN
     fclose(pFile);
     return nameOf;
 }
+

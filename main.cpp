@@ -52,7 +52,7 @@ int main(int argc, char** argv) {
 
     //float volume;
     float highT, alpha=0.43, beta=0.1;
-    float percentAddRemove = 0.931, lambda = 0.1, stov=0.001;//0.000051;
+    float percentAddRemove = 0.631, lambda = 0.1, stov=0.001;//0.000051;
 
     float acceptanceRate = 0.44, eta = 0.001, mu = 0.0001f; // 10^-4 to 10^-5 seems to be acceptable
     unsigned int highTempRounds;
@@ -300,30 +300,36 @@ int main(int argc, char** argv) {
             auto workingsetSmoothed = iofqdata.getWorkingSetSmoothed();
             float qmax = iofqdata.getQmax();
 
-            DensityMapper dm(maskFile, qmax, 2.5);
+            //DensityMapper dm(maskFile, qmax, 2.61);
+            DensityMapper dm(maskFile, qmax, 2.71);
 
             // maxBin should be adjusted to 19 for ribo data, 150 is too small for dmax
             //dm.setBessels(iofqdata_bsa.getQvalues());
             //dm.calculateDensityCoefficientAtLMR();
             //int totalroounds = dm.getTotalCenteredCoordinates()*10/0.01;
-//            dm.openMP();
+            //dm.openMP();
             if (toppercent < 0.001){
                 throw std::invalid_argument("** ERROR => TOPPERCENT : TOO SMALL MUST BE GREATER THAN 0.001 : " + std::to_string(toppercent) );
             }
 
-    dm.refineModel(multiple, toppercent, highTempRounds,
-                   const_cast<std::vector<Datum> &>(iofqdata.getWorkingSet()),
-                   const_cast<std::vector<Datum> &>(iofqdata.getWorkingSetSmoothed()));
+//    dm.refineModel(multiple, toppercent, highTempRounds,
+//                   const_cast<std::vector<Datum> &>(iofqdata.getWorkingSet()),
+//                   const_cast<std::vector<Datum> &>(iofqdata.getWorkingSetSmoothed()));
 
+            dm.refineModelOPENMP(6, multiple, toppercent, highTempRounds,
+                           const_cast<std::vector<Datum> &>(iofqdata.getWorkingSet()),
+                           const_cast<std::vector<Datum> &>(iofqdata.getWorkingSetSmoothed()));
 
-return 1;
+//            dm.refineModelASA(multiple*51713, const_cast<std::vector<Datum> &>(iofqdata.getWorkingSet()),
+//                              const_cast<std::vector<Datum> &>(iofqdata.getWorkingSetSmoothed()));
 
-            PofRData data(datfiles[0], false);
-            bead_radius = (float)(0.4999999999 * (data.getBinWidth()));
-
-            KDE kde(fileList, bead_radius, toppercent);
-
-            logger("Distribution-based lattice ", std::to_string(bead_radius));
+            return SUCCESS;
+//            PofRData data(datfiles[0], false);
+//            bead_radius = (float)(0.4999999999 * (data.getBinWidth()));
+//
+//            KDE kde(fileList, bead_radius, toppercent);
+//
+//            logger("Distribution-based lattice ", std::to_string(bead_radius));
 
 //            if (sym.compare("C1") != 0) {
 //                if (std::regex_match(sym, std::regex("(C|D)[0-9]+", ECMAScript | icase))) {
@@ -374,7 +380,7 @@ return 1;
              */
             PofRData * mainDataset = dynamic_cast<PofRData*>(minFunction.getMainDataset());
 
-            bead_radius = reduce ? (float)(mainDataset->getBinWidth() * std::sqrt(3) / 6.0d) : (float)(mainDataset->getBinWidth()/2.0f);
+            bead_radius = reduce ? (float)(mainDataset->getBinWidth() * std::sqrt(3) / 6.0) : (float)(mainDataset->getBinWidth()/2.0f);
             float interconnectivityCutOff = bead_radius * 2.001f;
             /*
              * SQUARE LATTICE
@@ -401,6 +407,7 @@ return 1;
 
             /*
              * for tetrahedron, radius of circumscribing sphere is 1.22*d_max
+             * longest dimension on tetrahedron is along an edge which does not coincide with diameter of sphere
              * As a guess, 1.3 should work in most cases;
              */
             float searchSpace = (isSeeded && !refine) ? (mainDataset->getDmax() * 1.47f) : mainDataset->getDmax()*1.4f;

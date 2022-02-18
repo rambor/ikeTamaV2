@@ -20,18 +20,13 @@
 #ifndef IKETAMA_DENSITYMAPPER_H
 #define IKETAMA_DENSITYMAPPER_H
 
+#include <omp.h>
 #include <math.h>
 #include <random>
 #include <sastools/Datum.h>
 #include <Eigen/Core>
 #include <sastools/simde-no-tests-master/simde-arch.h>
 #include <sastools/simde-no-tests-master/simde-common.h>
-
-#ifdef __APPLE__ //Mac OSX has a different name for the header file
-    #include <OpenCL/opencl.h>
-#else
-    #include <CL/cl.h>
-#endif
 
 #include <string>
 #include <vector>
@@ -52,13 +47,14 @@ class DensityMapper {
 
     struct Trial{
         double value;
+        float dw;
         float counter;
         float scale;
         std::vector<float> model_amplitudes;
         std::vector<float> residuals;
         Trial() = default;
 
-        Trial(double val, float cntr, float scale, std::vector<float>  & vec, std::vector<float>  & res) : value(val), counter(cntr), scale(scale) {
+        Trial(double val, float dw, float cntr, float scale, std::vector<float>  & vec, std::vector<float>  & res) : value(val), dw(dw), counter(cntr), scale(scale) {
             //indices = std::vector<unsigned int>(vec);
             model_amplitudes = std::move(vec);
             residuals = std::move(res);
@@ -69,12 +65,21 @@ class DensityMapper {
         }
     };
 
+    struct Density{
+        unsigned int index;
+        float density;
+        Density() = default;
+        Density(unsigned int index, float val) : index(index), density(val) {
+        }
+    };
+
     float sampling_frequency;
     float delta_r;
     float cutoff;
     float kmax;
     float fwhm_sigma;
     float ylm_size;
+    float within_limit, upper_limit;
 
     std::vector<float> rvalues;
     std::vector<double> cos_thetas;
@@ -88,23 +93,24 @@ class DensityMapper {
     float * debye_factors;
     //aligned_vector debye_factors;
 
-    PointSetModel modelDensityHCP, inputBaseModel;
+    PointSetModel modelHCPSamplingDensityPoints, inputBaseModel;
 
     std::vector<Shell> shells;
     std::vector<LatticePoint> lattice_points;
 
     std::vector<vector3> centered_coordinates;
-    std::vector<vector3> grid_for_map;
+
     std::vector<float> amplitudes;
 
-    std::map<unsigned int long, std::vector<unsigned int long >> neighbors;
-    std::vector<unsigned int> keptHCPLatticePoints;
+    std::map<unsigned int, std::set<unsigned int >> neighboringHCPPointsOfModelLattice;
+    std::vector<unsigned int> keptHCPSamplingPoints;
 
     std::vector<bool> useIt;
 
     int total_shells, lmax, bessel_size, qvalues_size, total_centered_coordinates;
 
     float dmin_supremum, dmin_infimum, stdev_dmin, average_dmin;
+    float max_neighbors;
 
     void createSphericalFibonacciLattice();
 
@@ -142,14 +148,12 @@ public:
                      std::vector<Datum> & workingSet,
                      std::vector<Datum> & workingSetSmoothed);
 
-    void createDensityMapGrid();
-
     void printLatticePointsInfo();
 
     int getTotalCenteredCoordinates(){ return total_centered_coordinates;}
 
-    std::string headerParametersForXPLOR(int &na, int &nb, int &nc);
-    std::string headerParametersForXPLORFlipped(int & na, int & nb, int & nc);
+    std::string headerParametersForXPLOR(int &na, int &nb, int &nc, float grid_spacing);
+    std::string headerParametersForXPLORFlipped(int & na, int & nb, int & nc, float grid_spacing);
 
     void createXPLORMap(std::string name);
 
@@ -161,9 +165,11 @@ public:
 
     void setDebyeFactors( std::vector<Datum> & workingSet);
 
+    void populateICalcOpenMP(unsigned int total_q, unsigned int totalHCPInUse, std::vector<float> & iCalc, float * squared_amplitudes, float * db);
     void populateICalc(unsigned int total, std::vector<float> & pICalc, float * squared_amplitudes);
 
-    float populateDensities(std::vector<float> &amplitudesT, std::vector<float> &densities, float * squared_amplitudes);
+    float populateDensities(std::vector<float> &amplitudesT, std::vector<float> &densities);
+    void populateDensitiesOMP(unsigned int totalHCPInUse, std::vector<Neighbors> neighbors, std::vector<float> & amplitudesT, std::vector<float> & densities_at_HCP);
 
     float calculateScaleFactor(unsigned int total, float *const pICalc, float *const pSigma, Datum *const pWorkingSet);
 
@@ -176,13 +182,63 @@ public:
                     Datum * const pWorkingSetSmoothed,
                     std::string name);
 
-    float calculateDurbinWatson(unsigned int total, float * const residuals);
+    float calculateDurbinWatson(unsigned int total, const float * const residuals);
 
-    int getTotal_centered_coordinates() const;
-
-//    void openMP();
+    void openMP();
 
     void writeLatticePoints(std::string name);
+
+    float calculate_rmsd(std::vector<float> & priors);
+
+    unsigned int probability_count(float limit);
+    unsigned int getTotalKeptHCPSamplingPoints(){return keptHCPSamplingPoints.size();}
+
+    void refineModelASA(unsigned int highTempRounds, std::vector<Datum> &workingSet,
+                   std::vector<Datum> &workingSetSmoothed);
+
+    void updateASATemp(unsigned int index, unsigned int evalMax, float acceptRate, double &temp, double &inv_temp);
+
+    void updateDensities(std::vector<unsigned int> &indicesInUse, std::vector<float> &amplitudesT,
+                         std::vector<float> &densities_at_HCP, float *squared_amplitudes);
+
+    const std::vector<LatticePoint> &getLatticePoints() const {
+        return lattice_points;
+    }
+
+
+    void updateICalc(std::vector<Density> & priorHCPdensities,
+                     const unsigned int total_data,
+                     std::vector<float> & i_calc,
+                     float * prior_hcp_electron_densities,
+                     float * hcp_electron_densities);
+
+    void getIndicesOfHCPSamplingGrid(std::vector<unsigned int> & indices_selected,
+                                     std::vector<unsigned int> & hcpSamplingPointsToUpdate);
+
+    void populateSquaredAmplitudes(unsigned int totalHCPInUse, std::vector<float> &densities_at_HCP,
+                                   float *squared_amplitudes);
+
+    void printParameters(std::vector<float> &temp,
+                         std::vector<double> &accept,
+                         std::vector<float> &score,
+                         std::vector<float> & chis, std::vector<int> & flips);
+
+    double f1(double x, double y);
+
+    void refineModelOPENMP(int max_threads, int max_rounds, float topPercent, int models_per_round,
+                           std::vector<Datum> &workingSet, std::vector<Datum> &workingSetSmoothed);
+
+    float convolutionFunction(float length);
+
+    void setMaxNeighbors();
+
+    void setLatticePointNeighbors();
+
+    bool checkConnectivity(std::set<unsigned int> &selectedIndices, std::vector<LatticePoint> & omp_lattice_points);
+
+
+    std::vector<LatticePoint> & getLatticePoints(){ return lattice_points;}
+
 };
 
 

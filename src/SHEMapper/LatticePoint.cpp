@@ -31,23 +31,40 @@ LatticePoint::LatticePoint(int index, int bins) : index(index), bins(bins) {
 
     amplitudes.resize(bins);
 
-    amplitudes[0] = -0.269f;
-    amplitudes[1] = 0.6345f;
-    amplitudes[2]=1.0f;
-
-
     // electron densities - nucleic, protein, lipid, and lipid subtracted water and divided by largest value
-//    amplitudes[0] = -0.269f;
-//    amplitudes[1] = 0.103f;
-//    amplitudes[2] = 0.682543f;
-//    amplitudes[3] = 1.0f;
+//    amplitudes[0] = -0.034f; //lipid
+//    amplitudes[1] = 0.041f; // PEG
+//    amplitudes[2] = 0.086f; // protein
+//    amplitudes[3] = 0.216f; //nucleic
+
+// variations
+    amplitudes[0] = 0.0f;
+    amplitudes[1] = 0.33;
+    amplitudes[2] = 0.66;
+    amplitudes[3] = 1.0;
+
+    /*
+     * lipid 0.3
+     * water 0.334
+     * PEG 0.375
+     * protein 0.420
+     * nucleic 0.550
+     */
+    // min max normalized using 0.3, 0.334, 0.420, 0.550
+//    amplitudes[0] = 0;
+//    amplitudes[1] = 0.0085f;
+//    amplitudes[2] = 0.03f;
+//    amplitudes[3] = 0.0625f;
+
 
     total_amplitudes = amplitudes.size();
     probabilities.resize(total_amplitudes);
     occurences.resize(total_amplitudes);
 
+    this->resetCounter();
     this->resetProbabilities();
     this->setWeightedAmplitude();
+    this->setRandomIndexForConvergence();
 }
 
 /*
@@ -55,7 +72,7 @@ LatticePoint::LatticePoint(int index, int bins) : index(index), bins(bins) {
  */
 float LatticePoint::guessAmplitude(float random_number) const {
     float sum = probabilities[0];
-    for(int i=1; i<total_amplitudes; i++){ // CDF - cumalative distribution function
+    for(unsigned int i=1; i<total_amplitudes; i++){ // CDF - cumalative distribution function
         if (random_number <= sum){
             return amplitudes[i-1];
         }
@@ -69,7 +86,7 @@ float LatticePoint::guessAmplitude(float random_number) const {
 
 float LatticePoint::CDF(float prob){
     float sum = probabilities[0];
-    for(int i=1; i<total_amplitudes; i++){ // CDF - cumalative distribution function
+    for(unsigned int i=1; i<total_amplitudes; i++){ // CDF - cumalative distribution function
         if (prob <= sum){
             return amplitudes[i-1];
         }
@@ -102,7 +119,7 @@ void LatticePoint::addToCounter(float value) {
      *     amplitudes[3] = 1.0f;
      *
      */
-    for(int i=0; i<total_amplitudes; i++){
+    for(unsigned int i=0; i<total_amplitudes; i++){
         if (abs(value - amplitudes[i]) < 0.01){
             occurences[i]+=1;
             return;
@@ -111,7 +128,22 @@ void LatticePoint::addToCounter(float value) {
 }
 
 
-void LatticePoint::updateProbabilities(){
+void LatticePoint::calculateProbabilitiesFromOccurrences(){
+    int sum = 0;
+    for(auto & point : occurences){
+        sum += point;
+    }
+
+    auto invTotal = 1.0f/(float)sum;
+
+    unsigned int index_of_occurrence = 0;
+    for(auto & point : occurences){
+        probabilities[index_of_occurrence] = point*invTotal;
+        index_of_occurrence++;
+    }
+}
+
+void LatticePoint::updateProbabilities(float updateAlpha){
 
     int sum = 0;
     for(auto & point : occurences){
@@ -120,14 +152,12 @@ void LatticePoint::updateProbabilities(){
 
     auto invTotal = 1.0f/(float)sum;
 
-    const float updateAlpha=0.67f;
     float oldprob, newprob;
 
-    int index = 0;
-    float temp;
+    unsigned int index_of_occurrence = 0;
     for(auto & point : occurences){
 
-        oldprob = (1.0f - updateAlpha)*probabilities[index];
+        oldprob = (1.0f - updateAlpha)*probabilities[index_of_occurrence];
 
         if (point > 0){
             newprob = updateAlpha*((float)point*invTotal) + oldprob;
@@ -135,8 +165,8 @@ void LatticePoint::updateProbabilities(){
             newprob = oldprob;
         }
 
-        probabilities[index] = newprob;
-        index++;
+        probabilities[index_of_occurrence] = newprob;
+        index_of_occurrence++;
     }
 
 }
@@ -145,17 +175,12 @@ void LatticePoint::updateProbabilities(){
 
 void LatticePoint::printProbabilities(){
 
-    float best = probabilities[0];
     float sum = 0.0f;
 
-    int count = 0, keep=0;
+    int count = 0;
     for(auto & pp : probabilities){
-        std::cout << count << " " << amplitudes[count] << " " << pp << " " << occurences[count] << std::endl;
-        sum += pp;
-        if (pp > best){
-            best = pp;
-            keep = count;
-        }
+        std::cout << "["<< count << "] " << amplitudes[count] << " " << pp << " " << occurences[count] << std::endl;
+        sum += pp*amplitudes[count];
         count++;
     }
     std::cout << "LATTICE :: "<< index << " sum " << " " << sum << std::endl;
@@ -178,8 +203,8 @@ std::string LatticePoint::PDBLineForOutput(vector3 & vec){
     return "string";
 }
 
-float LatticePoint::getProbability(int index){
-    return probabilities[index];
+float LatticePoint::getProbability(int select_index){
+    return probabilities[select_index];
 }
 
 
@@ -195,4 +220,12 @@ std::string LatticePoint::getDetails(){
     }
 
     return tempHeader;
+}
+
+unsigned int LatticePoint::getTotalAmplitudes() const {
+    return total_amplitudes;
+}
+
+void LatticePoint::addNeighbor(unsigned int index){
+    neighbors.insert(index);
 }

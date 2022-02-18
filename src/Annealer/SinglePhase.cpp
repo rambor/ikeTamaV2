@@ -547,8 +547,8 @@ std::string Anneal::refineHomogenousBodyASAHybridEx(PointSetModel *pModel, PofRD
     std::vector<unsigned int> testBinCount(maxbin);    // smallish vector, typically < 50
 //    std::vector<unsigned int> binCountBackUp(maxbin);  // smallish vector, typically < 50
 
-    std::vector<double> contactsDistributionOfModel(13);
-    std::vector<double> tempContactsDistributionOfModel(13);
+//    std::vector<double> contactsDistributionOfModel(13);
+//    std::vector<double> tempContactsDistributionOfModel(13);
 
     logger("TOTAL EXP N_S BINS", formatNumber(totalBins));
     logger("MAX MODEL N_S BINS",formatNumber(maxbin));
@@ -607,18 +607,21 @@ std::string Anneal::refineHomogenousBodyASAHybridEx(PointSetModel *pModel, PofRD
 //    double tempContactSum, currentContactsSum = contactPotential(&beads_in_use_tree, pModel);
 //    double tempKLDivContacts, currentKLDivContacts = currentContactsSum*invTotal;
     //float target = 9.0f;
-    targetContacts = 1.9111;
+//    targetContacts = 1.9111;
+//    targetContacts = 1.5111;
 //      targetContacts = 2.51111;
 //    targetContacts = 2.7111;
-//    targetContacts = 8.7111;
-//    targetContacts = 4.11;
+    targetContacts = 8.7111;
+//    targetContacts = 6.711;
 //    targetContacts = 0.99*contactsAvg;
     double contactsAvg = 2.0*binCount[0]/(float)workingLimit;
 //    double currentContactsPotential = calculateAvgContactsPotential(binCount, workingLimit);
 
-    populateContactsDistribution(contactsDistributionOfModel, &beads_in_use_tree, pModel);
-    std::copy(contactsDistributionOfModel.begin(), contactsDistributionOfModel.end(), tempContactsDistributionOfModel.begin());
-    double tempKLDivContacts, currentKLDivContacts = calculateKLDivergenceContactsDistribution(contactsDistributionOfModel);
+//    populateContactsDistribution(contactsDistributionOfModel, &beads_in_use_tree, pModel);
+//    std::copy(contactsDistributionOfModel.begin(), contactsDistributionOfModel.end(), tempContactsDistributionOfModel.begin());
+    double tempKLDivContacts;// currentKLDivContacts = calculateKLDivergenceContactsDistribution(contactsDistributionOfModel);
+    double currentKLDivContacts = calculateAvgContactsPotential(binCount, workingLimit);
+
     /*
      * there may be a chance that currentKLDivContacts comes back as 0, so if using to set a constant like dividing by,
      * then there will be a chance of return NAN
@@ -637,12 +640,12 @@ std::string Anneal::refineHomogenousBodyASAHybridEx(PointSetModel *pModel, PofRD
 //    double alphaConstant = alpha > 0 ? std::pow(alpha/currentCDW, 1.0/(double)fifteenPercent) : 0;
 //    double contactDistributionWeight = alphaConstant*currentKL/currentKLDivContacts;
 //    double scaleFactor = alpha*currentKL/currentKLDivContacts;
-    double targetKL = 0.00001;// should be relative to 10^-6
-    double scaleFactor = alpha*targetKL/0.01;
 
+    double targetKL = 0.00001;// should be relative to 10^-6
+    double scaleFactor = targetKL;//alpha*targetKL/0.01;
 //    double scaleFactor = alpha*targetKL/currentKLDivContacts;
 //    double startingScaleReduction = 1000;
-    double currentCDW = scaleFactor;///startingScaleReduction;
+    double currentCDW = scaleFactor;//startingScaleReduction;
 //    double alphaConstant = alpha > 0 ? std::pow(startingScaleReduction, 1.0/(double)fifteenPercent) : 0;
 //    alphaConstant = 0;
     double contactDistributionWeight = currentCDW;
@@ -701,11 +704,11 @@ std::string Anneal::refineHomogenousBodyASAHybridEx(PointSetModel *pModel, PofRD
                 addToPr(addMe, bead_indices, workingLimit, pBin, totalBeadsInSphere, binCount);
 
                 testKL = pData->getScore(binCount);
-
                 beads_in_use_tree.insert(addMe);
-                addToContactsDistribution(addMe, tempContactsDistributionOfModel, &beads_in_use_tree, pModel);
 
-                tempKLDivContacts = calculateKLDivergenceContactsDistribution(tempContactsDistributionOfModel);
+//                addToContactsDistribution(addMe, tempContactsDistributionOfModel, &beads_in_use_tree, pModel);
+//                tempKLDivContacts = calculateKLDivergenceContactsDistribution(tempContactsDistributionOfModel);
+                tempKLDivContacts = calculateAvgContactsPotential(binCount, workingLimit);
 
                 tempNumberOfComponents = eulerTour.addNode(addMe, pModel);
 
@@ -713,8 +716,6 @@ std::string Anneal::refineHomogenousBodyASAHybridEx(PointSetModel *pModel, PofRD
                         lambda*connectivityPotential(tempNumberOfComponents) +
                         contactDistributionWeight*tempKLDivContacts;
 
-                //testKL <= startingKL &&
-                //this_energy <= starting_energy &&
                 if ( (this_energy < current_energy || ( std::exp((current_energy - this_energy) * inv_kb_temp) > distribution(gen) ))) {
                     isUpdated = true;
                     std::sprintf(addRemoveText, "   ADDED => %i", addMe);
@@ -753,10 +754,12 @@ std::string Anneal::refineHomogenousBodyASAHybridEx(PointSetModel *pModel, PofRD
                 // still need to sort, swap changes the order
                 testKL = pData->getScore(binCount);
 
-                removeFromContactsDistribution(original, tempContactsDistributionOfModel, &beads_in_use_tree, pModel);
+//                removeFromContactsDistribution(original, tempContactsDistributionOfModel, &beads_in_use_tree, pModel);
                 beads_in_use_tree.erase(original);
 
-                tempKLDivContacts = calculateKLDivergenceContactsDistribution(tempContactsDistributionOfModel);
+//                tempKLDivContacts = calculateKLDivergenceContactsDistribution(tempContactsDistributionOfModel);
+                tempKLDivContacts = calculateAvgContactsPotential(binCount, workingLimit);
+
                 this_energy = testKL +
                         lambda*connectivityPotential(tempNumberOfComponents) +
                         contactDistributionWeight*tempKLDivContacts;
@@ -806,7 +809,7 @@ std::string Anneal::refineHomogenousBodyASAHybridEx(PointSetModel *pModel, PofRD
                 }
             }
 
-            if (retry){ // favors beads that are well connected
+            if (retry){ //
                 bool foundIt = true;
 //                for(unsigned int s=0; s<workingLimit; s++){
 //                    position = selections[s];
@@ -842,7 +845,7 @@ std::string Anneal::refineHomogenousBodyASAHybridEx(PointSetModel *pModel, PofRD
             removeFromPr(swap1, bead_indices, workingLimit, pBin, totalBeadsInSphere, binCount);
 
             // remove from beads_in_use_tree
-            removeFromContactsDistribution(swap1, tempContactsDistributionOfModel, &beads_in_use_tree, pModel);
+//            removeFromContactsDistribution(swap1, tempContactsDistributionOfModel, &beads_in_use_tree, pModel);
             beads_in_use_tree.erase(swap1);
 
             // find new position weighted by connectivity, fewer connections has higher probability
@@ -866,15 +869,15 @@ std::string Anneal::refineHomogenousBodyASAHybridEx(PointSetModel *pModel, PofRD
             testKL = pData->getScore(binCount);
 
             beads_in_use_tree.insert(originalSwap2Value); // add new lattice
-            addToContactsDistribution(originalSwap2Value, tempContactsDistributionOfModel, &beads_in_use_tree, pModel);
+//            addToContactsDistribution(originalSwap2Value, tempContactsDistributionOfModel, &beads_in_use_tree, pModel);
+//            tempKLDivContacts = calculateKLDivergenceContactsDistribution(tempContactsDistributionOfModel);
 
-            tempKLDivContacts = calculateKLDivergenceContactsDistribution(tempContactsDistributionOfModel);
+            tempKLDivContacts = calculateAvgContactsPotential(binCount, workingLimit);
 
             this_energy = testKL + contactDistributionWeight*tempKLDivContacts;
             tempNumberOfComponents = eulerTour.addNode(originalSwap2Value, pModel);
             this_energy += lambda*connectivityPotential(tempNumberOfComponents);
 
-            //testKL <= startingKL &&
             if ( (this_energy < current_energy || (std::exp((current_energy - this_energy) * inv_kb_temp) > distribution(gen)))) {
                 isUpdated = true;
                 std::sprintf(addRemoveText, " SWAPPED => %i to %i ", swap1, originalSwap2Value);
@@ -898,6 +901,7 @@ std::string Anneal::refineHomogenousBodyASAHybridEx(PointSetModel *pModel, PofRD
             current_energy = this_energy;
             currentNumberOfComponents = tempNumberOfComponents;
             currentKLDivContacts = tempKLDivContacts;
+            contactsAvg = 2.0*binCount[0]/workingLimit;
 
             acceptRate = inv500slash499*acceptRate+inv500;
             isUpdated = false;
@@ -928,10 +932,9 @@ std::string Anneal::refineHomogenousBodyASAHybridEx(PointSetModel *pModel, PofRD
                 }
             }
 
-            std::copy(tempContactsDistributionOfModel.begin(), tempContactsDistributionOfModel.end(), contactsDistributionOfModel.begin());
-            contactsAvg = 2.0*binCount[0]/(float)workingLimit;
+//            std::copy(tempContactsDistributionOfModel.begin(), tempContactsDistributionOfModel.end(), contactsDistributionOfModel.begin());
         } else {
-            std::copy(contactsDistributionOfModel.begin(), contactsDistributionOfModel.end(), tempContactsDistributionOfModel.begin());
+//            std::copy(contactsDistributionOfModel.begin(), contactsDistributionOfModel.end(), tempContactsDistributionOfModel.begin());
             acceptRate = inv500slash499*acceptRate;
             failures++;
         }
@@ -952,6 +955,10 @@ std::string Anneal::refineHomogenousBodyASAHybridEx(PointSetModel *pModel, PofRD
             status = "EQUILIBRATING";
         }
 
+        if (numberOfCoolingTempSteps > ninetyfivePercent) {
+            percentAddRemove = 0.1;
+        }
+
         if (numberOfCoolingTempSteps > sixtyfivePercent && writeOnce){
                 std::string name = "equilibrated";
                 std::string nameOfModel = pModel->writeModelToFile2(
@@ -967,7 +974,6 @@ std::string Anneal::refineHomogenousBodyASAHybridEx(PointSetModel *pModel, PofRD
                         contactsAvg);
                 writeOnce = false;
         }
-
 
         double tempDKLValue = contactDistributionWeight*currentKLDivContacts;
 
@@ -998,8 +1004,8 @@ std::string Anneal::refineHomogenousBodyASAHybridEx(PointSetModel *pModel, PofRD
     printParameters(&acceptanceRateDuringRun, &tempDuringRun, &divergenceDuringRun, &workingLimitDuringRun);
 
     unsigned int originalCount=0;
-    for(auto sit = beads_in_use_tree.begin(); sit != beads_in_use_tree.end(); ++sit){
-        if (original_hull.find(*sit) != original_hull.end()){
+    for(unsigned int sit : beads_in_use_tree){
+        if (original_hull.find(sit) != original_hull.end()){
             originalCount++;
         }
     }
@@ -1024,18 +1030,18 @@ std::string Anneal::refineHomogenousBodyASAHybridEx(PointSetModel *pModel, PofRD
     for (unsigned int c=1; c<13; c++){
         for (unsigned int i=0; i<workingLimit; i++){
             if (numberOfContactsFromSet(&beads_in_use_tree, pModel, bead_indices[i]) == c){
-                totalCounts += 1.0d;
+                totalCounts += 1.0;
             }
         }
     }
 
     std::cout << " DISTRIBUTION OF CONTACTS" << std::endl;
     for (unsigned int c=1; c<13; c++){
-        double totalContactsAt = 0.0d;
+        double totalContactsAt = 0.0;
         for (unsigned int i=0; i<workingLimit; i++){
             //contactSum += numberOfContacts(lowest_bead_indices[i], &lowest_bead_indices, lowestWorkingLimit, contactCutOff, pModel, pDistance);
             if (numberOfContactsFromSet(&beads_in_use_tree, pModel, bead_indices[i]) == c){
-                totalContactsAt += 1.0d;
+                totalContactsAt += 1.0;
             }
         }
         std::printf("  CONTACTS : %4d => %.3f \n", c, totalContactsAt/totalCounts);
