@@ -2361,7 +2361,7 @@ void PointSetModel::createSeedFromPDB(std::string filename, PofRData * pData, un
             sum += 1.0;
         }
     }
-    std::cout << " A " << std::endl;
+
     //normalize
     double invSum = 1.0d/sum;
     for (unsigned int i=0; i<totalBins; i++){
@@ -2369,19 +2369,18 @@ void PointSetModel::createSeedFromPDB(std::string filename, PofRData * pData, un
         (*pdbPr)[i] *= invSum;
     }
 
-    std::cout << " AA " << std::endl;
     // plot should integrate to 1
     // prune beads that are single
     EulerTour eulerTour(seed_indices.begin(), seed_indices.size(), this);
     if (eulerTour.getNumberOfComponents() > 1){ // add neighbors
 
     }
-    std::cout << " AAA " << std::endl;
+
     std::sort(seed_indices.begin(), seed_indices.end());
 
     total_in_seed = seed_indices.size();
     //pModel->printSelectedBeads(0, totalKept, *keptBeads);
-    std::cout << " AAAA " << std::endl;
+
     pdbModel.writeCenteredCoordinatesToFile("centeredPDBSeed");
 
     this->writeSubModelToFile(0, total_in_seed, seed_indices, "centeredLatticeSeed");
