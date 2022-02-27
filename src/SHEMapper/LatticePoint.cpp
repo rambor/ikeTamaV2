@@ -37,11 +37,12 @@ LatticePoint::LatticePoint(int index, int bins) : index(index), bins(bins) {
 //    amplitudes[2] = 0.086f; // protein
 //    amplitudes[3] = 0.216f; //nucleic
 
-// variations
-    amplitudes[0] = 0.0f;
-    amplitudes[1] = 0.33;
-    amplitudes[2] = 0.66;
-    amplitudes[3] = 1.0;
+    // variations
+    // zero is required as some of the points in the reapping could be erroroneous
+//    amplitudes[0] = 0.0;
+//    amplitudes[1] = 0.034;
+//    amplitudes[2] = 0.66;
+//    amplitudes[3] = 1.0;
 
     /*
      * lipid 0.3
@@ -55,6 +56,11 @@ LatticePoint::LatticePoint(int index, int bins) : index(index), bins(bins) {
 //    amplitudes[1] = 0.0085f;
 //    amplitudes[2] = 0.03f;
 //    amplitudes[3] = 0.0625f;
+
+    amplitudes[0] = 0;
+    amplitudes[1] = 1.0f/9.0f;
+    amplitudes[2] = 1.0f/3.0f;
+    amplitudes[3] = 1.0f;
 
 
     total_amplitudes = amplitudes.size();

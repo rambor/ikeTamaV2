@@ -93,7 +93,7 @@ class DensityMapper {
     float * debye_factors;
     //aligned_vector debye_factors;
 
-    PointSetModel modelHCPSamplingDensityPoints, inputBaseModel;
+    PointSetModel modelHCPSamplingDensityPoints;//, inputBaseModel;
 
     std::vector<Shell> shells;
     std::vector<LatticePoint> lattice_points;

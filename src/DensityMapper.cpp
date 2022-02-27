@@ -49,6 +49,8 @@ DensityMapper::DensityMapper(std::string filename, float qmax, float sampling_fr
 
     this->setLatticePointNeighbors();
 
+    tempmodel.writeCenteredCoordinatesToFile("CenteredInputModel");
+
     total_centered_coordinates = centered_coordinates.size();
     total_shells = (int)std::ceil(kmax/delta_r) + 1;
 
@@ -76,7 +78,7 @@ DensityMapper::DensityMapper(std::string filename, float qmax, float sampling_fr
     float frac = 1.1f;//1.2*sqrtf(3.0f/8.0f);
     //fwhm_sigma = (1.5f-0.71f)*cutoff/2.355f;
     //fwhm_sigma = cutoff/2.355f; // 0.5x causes steep cut-off, density looks very isolated
-    fwhm_sigma = sqrtf(-(0.5*0.5*cutoff*cutoff)*0.5/logf(0.01));
+    fwhm_sigma = sqrtf(-(0.5f*0.5f*cutoff*cutoff)*0.5/logf(0.01));
     /*
      * increasing fwhm_sigma_factor increases correlations between lattice points and makes it smoother
      * frac    fwhm_sigma_factor
@@ -118,7 +120,7 @@ DensityMapper::DensityMapper(std::string filename, float qmax, float sampling_fr
     }
 
     // use PointSetModel to make neighborhood for each point in centered coordinates
-    inputBaseModel = PointSetModel(centered_coordinates, 2.1f*sqrtf(max_r), dmin_supremum*0.5);
+//    inputBaseModel = PointSetModel(centered_coordinates, 2.1f*sqrtf(max_r), dmin_supremum*0.5);
     // for each r_value, I can calculate a sphere of specific area :: 4*PI*r^2
 
 //    std::vector<cl::Platform> all_platforms;
@@ -925,7 +927,7 @@ void DensityMapper::refineModelOPENMP(int max_threads, int max_rounds, float top
                                 std::vector<Datum> & workingSetSmoothed ){
 
     // parallel programming of this would divide total_annealing_steps into different processes and using MPI to update best solution
-    models_per_round *= 7;
+    models_per_round *= 9;
     int threads = max_threads;
     const unsigned int total_data = workingSet.size();
     Datum * const pWorkingSet = workingSet.data();
@@ -1038,7 +1040,7 @@ void DensityMapper::refineModelOPENMP(int max_threads, int max_rounds, float top
                     pPriors[i] = pLattice[i].guessAmplitude(omp_distribution(ompgen));
                 }
 
-                // based on guess, anything with Euler tour > 1 should be ingored
+                // based on guess, anything with Euler tour > 1 should be ignored
                 std::set<unsigned int> selectedIndices;
 
                 for(int i=0; i < omp_total_amplitudes_from_lattice_points; i++){
@@ -1314,7 +1316,7 @@ void DensityMapper::refineModel(int max_rounds, float topPercent, int models_per
     float cutoff_limit, temp_amp, updateAlpha = 0.67;//, inv_total_lattice = 1.0f/(float)total_amplitudes_from_lattice_points;
     cutoff_limit = lattice_points[0].getLastAmplitude();
     std::set<unsigned int> selected_indices;
-    unsigned int neighborLimit = inputBaseModel.getNeighborLimit();
+//    unsigned int neighborLimit = inputBaseModel.getNeighborLimit();
 
     for(; round<max_rounds; round++){
         unsigned int topAdded=0;
@@ -1696,7 +1698,7 @@ void DensityMapper::createXPLORMap(std::string name){
                      *
                      */
 
-                    if (length < upper_limit){
+                    if (length <= upper_limit){
                         val = convolutionFunction(length);
                         kernelSum += *(pAmp + c)*val;
                         divisor += val;
@@ -1745,11 +1747,14 @@ void DensityMapper::createXPLORMap(std::string name){
     fclose(pFile);
 
     // write out PDB cooordinates
-    tempHeader = "REMARK 256  4 sigma filter\n";
+    float sigmaFactor = 1.7;
+    tempHeader = "";
+    std::snprintf(buffer, 80, "REMARK 256  %.1f sigma filter\n", sigmaFactor);
+    tempHeader.append(buffer);
 
     float average = (mapSumSquared/mapCount);
     float stdev = std::sqrt(mapSumSquared/mapCount - ave*ave);
-    float aboveit = average + 2.3f*stdev;
+    float aboveit = average + sigmaFactor*stdev;
 
     int index = 1;
     char segids[] = { 'A', 'B', 'C', 'D'};
@@ -1823,7 +1828,9 @@ void DensityMapper::createXPLORMap(std::string name){
     fclose(pFile);
 
     // write out flipped PDB coordinates
-    tempHeader = "REMARK 256  4 sigma filter\n";
+    tempHeader = "";
+    std::snprintf(buffer, 80, "REMARK 256  %.1f sigma filter\n", sigmaFactor);
+    tempHeader.append(buffer);
     tempHeader.append("REMARK 256  Flipped (inverted) by changing X to -X for each point\n");
 
     index = 1;
@@ -1895,6 +1902,9 @@ void DensityMapper::writeLatticePoints(std::string name){
     fclose(pFile);
 }
 
+/*
+ *
+ */
 void DensityMapper::createHCPGrid(){
     // read in pdb file
     modelHCPSamplingDensityPoints = PointSetModel((2 * kmax), delta_r); // grid is more closely spaced than input model
@@ -1941,6 +1951,7 @@ void DensityMapper::createHCPGrid(){
     for(auto & index : keptHCPSamplingPoints){
 
         // make new neighborhood for each kept point
+        // neighbors are the input lattice points within distance to sampling lattice point
         neighborhoods.emplace_back(Neighbors(index));
         // get neighborhood
         Neighbors & lastOne = neighborhoods[neighborhoods.size() - 1];
@@ -1963,7 +1974,7 @@ void DensityMapper::createHCPGrid(){
         for (unsigned int a=0; a < total_centered_coordinates; a++){
             tempvec = &centered_coordinates[a];
             float dis = (bead_vec - *tempvec).length();
-            auto iter = neighboringHCPPointsOfModelLattice.find((a));
+            auto iter = neighboringHCPPointsOfModelLattice.find(a);
 
             if (dis < upper_limit){
                 float val = convolutionFunction(dis);
@@ -2760,7 +2771,6 @@ void DensityMapper::printParameters(std::vector<float> & accept, std::vector<dou
 }
 
 bool DensityMapper::checkConnectivity(std::set<unsigned int> & selectedIndices, std::vector<LatticePoint> & omp_lattice_points){
-
     /*
      * randomly grab from set
      * start adding if neighbor
@@ -2791,7 +2801,7 @@ bool DensityMapper::checkConnectivity(std::set<unsigned int> & selectedIndices, 
                 if (pLat->isNeighbor(neighbor)) { // if true, add to Euler Tour
                     //swap to
                     tour.insert(neighbor);
-                    // remove from to check
+                    // remove from toCheck, move to end, pop off and decrement total
                     std::iter_swap(toCheck.begin() + j, toCheck.begin() + total - 1);
                     toCheck.pop_back();
                     total--;
@@ -2811,6 +2821,7 @@ bool DensityMapper::checkConnectivity(std::set<unsigned int> & selectedIndices, 
     // if toCheck has any points remaining, suggests more than one tour
     return toCheck.empty(); // if empty means one tour
 }
+
 
 
 void DensityMapper::setLatticePointNeighbors(){
