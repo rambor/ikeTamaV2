@@ -39,6 +39,13 @@ bool fileExists(const std::string& file) {
     return (stat(file.c_str(), &buf) == 0);
 }
 
+// true if 'name' ends with 'suffix' (case-insensitive, so BSA_PR.DAT also matches)
+inline bool endsWith(const std::string &name, const std::string &suffix){
+    if (name.size() < suffix.size()) return false;
+    return std::equal(suffix.rbegin(), suffix.rend(), name.rbegin(),
+                      [](char a, char b){ return std::tolower((unsigned char)a) == std::tolower((unsigned char)b); });
+}
+
 int main(int argc, char** argv) {
     std::string datFile;
     std::string multiphaseFile;
@@ -52,14 +59,14 @@ int main(int argc, char** argv) {
 
     //float volume;
     float highT, alpha=0.43, beta=0.1;
-    float percentAddRemove = 0.631, lambda = 0.1, stov=0.001;//0.000051;
+    float percentAddRemove = 0.91, lambda = 0.1, stov=0.001;//0.000051;
 
-    float acceptanceRate = 0.44, eta = 0.001, mu = 0.0001f; // 10^-4 to 10^-5 seems to be acceptable
+    float acceptanceRate = 0.44, eta = 0.473, mu = 0.01f; // 10^-4 to 10^-5 seems to be acceptable
     unsigned int highTempRounds;
     float xaxis, yaxis, zaxis, cheight=0, cradius=0, toppercent=0.00875;
     unsigned int multiple = 37, trials=21371;
 
-    unsigned int totalModels=1, totalPhasesForSeeded=1;
+    unsigned int totalModels=1, totalPhasesForSeeded=1, neighborContactMin=4;
 
     std::string sym, prefix, maskFile, seedFile, phaseFile, hFile, anchorFile, consFile, fileList, histoFile;
     bool reduce=false, cemap=false, kdemap=false, makeSeed=false, mask=false, useCylinder=false, histo=false;
@@ -79,13 +86,16 @@ int main(int argc, char** argv) {
     descText += "\n ====>   beta : Weight volume constraint for defined component or violations";
     descText += "\n ====>        : with symmetry, beta should be around 0.1 ";
     descText += "\n ====>    eta : ";
-    descText += "\n ====>     mu : controls strength of volume constraint for the CVX hull in initial search";
+    descText += "\n ====>     mu : controls strength of contact count requirements between subunits (sym != C1)";
     descText += "\n ====>   \n\n";
     descText += "\n SEQUENTIAL RUNS IN BASH SHELL";
     descText += "\n ====>  for i in {0..17} ; do iketama file_pr.dat -p run_${i} ; done\n\n";
     descText += "\n ====>  ";
     descText += "\n MODELS WITH SYMMETRY";
-    descText += "\n ====>  increase mu to 0.01 using --mu 0.01 and set -u to a higher value";
+    descText += "\n ====>  ";
+    descText += "\n ====>  Makes symmetric model a connected assembly: the subunit must touch its neighbour";
+    descText += "\n ====>  ";
+    descText += "\n ====>  ";
     descText += "\n ====>  ";
     descText += "\n HIGH RESOLUTION MODELING AND REFINEMENT";
     descText += "\n ====>  start with a low resolution model where q_max of data is restricted to 0.2";
@@ -113,9 +123,9 @@ int main(int argc, char** argv) {
     descText += "\n ====>  ";
     descText += "\n REFINEMENT STRATEGIES WITH SYMMETRY";
     descText += "\n ====>  After a single modeling run, the final subunit model can be used as input using :";
-    descText += "\n ====>  ikeTama pr_file.dat -o D7 --refine --seed subunit_annealed.pdb --alpha 0.003 -c 3 -p run\n";
+    descText += "\n ====>  ikeTaMa pr_file.dat -o D7 --refine --seed subunit_annealed.pdb --alpha 0.003 -c 3 -p run\n";
     descText += "\n ====>  Alternatively, a low temp run can be performed with -r as :";
-    descText += "\n ====>  iketama pr_file.dat -o D7 --refine --seed damstart_subunit.pdb --alpha 0.003 -r 0.01 -c 3 -p refined\n";
+    descText += "\n ====>  ikeTaMa pr_file.dat -o D7 --refine --seed damstart_subunit.pdb --alpha 0.003 -r 0.01 -c 3 -p refined\n";
     descText += "\n MASKS";
     descText += "\n ====>  A mask can be made that restricts the search space.  roku9 will create an aligned_set.pdb which is";
     descText += "\n ====>  the entire set of aligned models, this can be read in to subselect the lattice and restrict the search";
@@ -134,9 +144,10 @@ int main(int argc, char** argv) {
             ("percentAddRemove", po::value<float>(&percentAddRemove), "Sets probability of Add/Remove versus positional refinement")
             ("alpha", po::value<float>(&alpha)->default_value(alpha), "weight Contacts Distribution")
             ("beta", po::value<float>(&beta)->default_value(beta), "weight to minimize symmetry violations ")
-            ("eta,e", po::value<float>(&eta)->default_value(eta), "compactness weight")
+            ("eta,e", po::value<float>(&eta)->default_value(eta), "compactness weight - rescaling weight")
             ("lambda,l", po::value<float>(&lambda), "connectivity weight, default is 10^-2")
             ("mu,m", po::value<float>(&mu)->default_value(mu), "convex hull weight, percentage of KL divergence")
+            ("neighborContactMin,m", po::value<unsigned int>(&neighborContactMin)->default_value(neighborContactMin), "Convergence of neighbor contact minimum")
             ("components,a", po::value<std::string>(&multiphaseFile), "File describing mapping of components with dat files")
             ("nametag,p", po::value<std::string>(&prefix)->default_value("run"), "Name to tag output files")
             ("seed", po::value<std::string>(&seedFile), "Use specified input PDB as seed")
@@ -244,32 +255,6 @@ int main(int argc, char** argv) {
         }
 
 
-        /*
-         * Kernel Density Approximations to aligned set of models
-         */
-//        if (vm["KDEmap"].as<bool>()){
-//            std::cout << "  => creating KDE map " << std::endl;
-//            std::vector<std::string> datfiles = vm["dat"].as<std::vector<std::string> >();
-//            PofRData data(datfiles[0], false);
-//
-//            bead_radius = (float)(0.4999999f * (data.getBinWidth())); // half bin width
-//
-//            if (toppercent < 0.001){
-//                throw std::invalid_argument("** ERROR => TOPPERCENT : TOO SMALL MUST BE GREATER THAN 0.001 : " + std::to_string(toppercent) );
-//            }
-//
-//            KDE kde(fileList, bead_radius, toppercent);
-//            std::cout << " BOUNDING BOX X " << kde.getCenteredMaxX() << std::endl;
-//            std::cout << " BOUNDING BOX Y " << kde.getCenteredMaxY() << std::endl;
-//            std::cout << " BOUNDING BOX Z " << kde.getCenteredMaxZ() << std::endl;
-//
-//            PointSetModel model(bead_radius, 2*kde.getCenteredMaxX(), 2*kde.getCenteredMaxY(), 2*kde.getCenteredMaxZ());
-//
-//            kde.createKDE(&model);
-//
-//            return SUCCESS;
-//        }
-
 
         /*
          * make seed from list of input files (akin to damstart.pdb)
@@ -290,39 +275,27 @@ int main(int argc, char** argv) {
          */
         if (vm["cemap"].as<bool>()){
 
-            std::cout << "  => creating CE Density Map " << std::endl;
+            std::cout << "  => creating Density Map " << std::endl;
             std::vector<std::string> datfiles = vm["dat"].as<std::vector<std::string> >();
 
-            IofQData iofqdata = IofQData(datfiles[0], false);
+            std::string prfile = (endsWith(datfiles[0], "_pr.dat")) ? datfiles[0] : (endsWith(datfiles[1], "_pr.dat")) ? datfiles[1] : throw std::invalid_argument("  ERROR => No PR file specified :");;
+            std::string sxfile = (endsWith(datfiles[0], "_sx.dat")) ? datfiles[0] : (endsWith(datfiles[1], "_sx.dat")) ? datfiles[1] : throw std::invalid_argument("  ERROR => No SX file specified :");;
+
+            IofQData iofqdata = IofQData(sxfile, false);
             iofqdata.extractData();
             iofqdata.makeWorkingSet();
             auto workingset = iofqdata.getWorkingSet();
             auto workingsetSmoothed = iofqdata.getWorkingSetSmoothed();
             float qmax = iofqdata.getQmax();
 
+            PofRData prdata(prfile, false);
+
+            densrefine::Options options;
+
             //DensityMapper dm(maskFile, qmax, 2.61);
             DensityMapper dm(maskFile, qmax, 2.71);
-
-            // maxBin should be adjusted to 19 for ribo data, 150 is too small for dmax
-            //dm.setBessels(iofqdata_bsa.getQvalues());
-            //dm.calculateDensityCoefficientAtLMR();
-            //int totalroounds = dm.getTotalCenteredCoordinates()*10/0.01;
-            //dm.openMP();
-            if (toppercent < 0.001){
-                throw std::invalid_argument("** ERROR => TOPPERCENT : TOO SMALL MUST BE GREATER THAN 0.001 : " + std::to_string(toppercent) );
-            }
-
-//    dm.refineModel(multiple, toppercent, highTempRounds,
-//                   const_cast<std::vector<Datum> &>(iofqdata.getWorkingSet()),
-//                   const_cast<std::vector<Datum> &>(iofqdata.getWorkingSetSmoothed()));
-
-            dm.refineModelOPENMP(6, multiple, toppercent, highTempRounds,
-                           const_cast<std::vector<Datum> &>(iofqdata.getWorkingSet()),
-                           const_cast<std::vector<Datum> &>(iofqdata.getWorkingSetSmoothed()));
-
-//            dm.refineModelASA(multiple*51713, const_cast<std::vector<Datum> &>(iofqdata.getWorkingSet()),
-//                              const_cast<std::vector<Datum> &>(iofqdata.getWorkingSetSmoothed()));
-
+            dm.refineModelDensity(workingsetSmoothed, &prdata, options);
+            //
             return SUCCESS;
 //            PofRData data(datfiles[0], false);
 //            bead_radius = (float)(0.4999999999 * (data.getBinWidth()));
@@ -380,7 +353,10 @@ int main(int argc, char** argv) {
              */
             PofRData * mainDataset = dynamic_cast<PofRData*>(minFunction.getMainDataset());
 
-            bead_radius = reduce ? (float)(mainDataset->getBinWidth() * std::sqrt(3) / 6.0) : (float)(mainDataset->getBinWidth()/2.0f);
+            bead_radius = reduce ? (float)(mainDataset->getBinWidth()/4.0f) : (float)(mainDataset->getBinWidth() * std::sqrt(3) / 6.0);
+
+            bead_radius = (bead_radius < 1) ? (float)mainDataset->getBinWidth()/2 : bead_radius;
+
             float interconnectivityCutOff = bead_radius * 2.001f;
             /*
              * SQUARE LATTICE
@@ -418,6 +394,13 @@ int main(int argc, char** argv) {
             PointSetModel model;
             //model = PointSetModel(maskFile, searchSpace, bead_radius); // use this for high resolution modeling
 
+            /*
+             * CREATE SEARCH SPACE
+             * USERS CAN SELECT CYLINDER, SPHERE OR BOX AS THEIR UNIVERSE
+             * OR
+             * SEARCH SPACE CAN COME FROM STARTING MODEL
+             * THERE ARE DIFFERENT SEARCH SPACES DEPENDING ON SYMMETRY
+             */
             if (sym.compare("C1") != 0) {
 
                 if (std::regex_match(sym, std::regex("(C|D)[0-9]+", ECMAScript | icase)) ||
@@ -450,6 +433,9 @@ int main(int argc, char** argv) {
                 } else if (mask) {
                     model = PointSetModel(maskFile, searchSpace, bead_radius); // use this for high resolution modeling
                 } else {
+                    /*
+                     * No assumptions, most basic model to create - spherical universe
+                     */
                     model = PointSetModel(searchSpace, bead_radius);
                 }
             }
@@ -477,7 +463,7 @@ int main(int argc, char** argv) {
              *
              * de novo lattice modeling has two main approaches
              * Fastest optimized method creates the search space and precalculates the entire distance space
-             * The fastest method will exceed the memory capactiy of the CPU
+             * The fastest method will exceed the memory capacity of the CPU
              * If too large, we switch to slow mode (Direct Method)
              */
             std::string nameTo = "initial_" + prefix;
@@ -570,7 +556,7 @@ int main(int argc, char** argv) {
                      *     - input PDB model is used as a scaffold for building new model
                      *
                      */
-                    if ((refine && isSeeded)) { // with symmetry
+                    if (refine && isSeeded) { // with symmetry
 
                         /*
                          * align all models using a program like roku9 or damaver -a *.pdb
@@ -581,7 +567,7 @@ int main(int argc, char** argv) {
                          * MASKED search performs a normal search but within a highly defined search space
                          *
                          * Refinement takes a model and performs a low energy optimization since we are
-                         * assuming we a close to the correct answer
+                         * assuming we are close to the correct answer
                          *
                          */
 
@@ -593,7 +579,9 @@ int main(int argc, char** argv) {
                         mainAnneal.refineSymModelRefine(&model, mainDataset, prefix);
 
                     } else { // masked Universe or not will be the set up for the following
-                      
+
+                        if (neighborContactMin > 4) mainAnneal.setInterfaceRequirement(neighborContactMin, mu);
+
                         if (!mainAnneal.createInitialModelSymmetry(&model, mainDataset)) {
                             return ERROR_UNHANDLED_EXCEPTION;
                         }

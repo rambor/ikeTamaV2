@@ -30,103 +30,69 @@
 #include <ctime>
 #include <set>
 #include <utility>
+#include <iostream>
 
 class PointSetModel;
 
 /**
- *   Class is used to monitor the graph connectivity
+ *   Tracks the number of connected components (graph connectivity) of the selected lattice points.
  *   EulerTour eulerTour(beginIt, subUnitWorkingLimit, pModel);
  *   currentNumberOfComponents = eulerTour.getNumberOfComponents();
+ *
+ *   Same interface and same results as the Euler-tour implementation, different internals:
+ *   every occupied lattice point carries a component label.
+ *     addNode     merges the components of the new point's neighbours (smaller ones are relabelled)
+ *     removeNode  if the removed point's neighbours are still connected through each other (checked locally,
+ *                 within the neighbourhood), nothing changes; otherwise a breadth-first search runs from each
+ *                 piece in turn and stops as soon as the pieces meet or all but one are exhausted, so the cost is
+ *                 set by the smaller pieces, not the model size.
+ *   The previous version rebuilt and searched std::list tours with std::map/std::set look-ups on every removal,
+ *   which was the largest single cost in the annealing loops.
+ *
+ *   getTours()/getPointerToLargestTour() are kept for compatibility: they build, on demand, one list of Node*
+ *   per component (each node listed once, not an Euler tour).
  */
-
 class EulerTour {
 
-    struct find_Node_by_key : std::unary_function< Node *, bool>{
-        find_Node_by_key(unsigned int keyToFind) : key(keyToFind){}
-        bool operator () (Node * p) { return p->getKey() == key; }
-    private:
-        unsigned int key;
-    };
+    PointSetModel * pModel = nullptr;
+    const unsigned int * neighborhood = nullptr;
+    unsigned int sizeOfNeighborhood = 12, neighborLimit = 0, universe = 0;
 
-    unsigned int totalComponents;
-    std::map<unsigned int, Node> nodes; // use shared pointer? make instance on heap
-    std::map<unsigned int, std::list< Node *> > tours; // key is the root of the tour
+    unsigned int totalComponents = 0;
+    std::vector<int> label;                  // component label per lattice point, -1 if not in the set
+    std::vector<unsigned int> compSize;      // size per label
+    std::vector<int> freeLabels;
+    unsigned int totalNodes = 0;
 
-    void createInitialTour(unsigned int workingLimit, PointSetModel *pModel, std::vector<unsigned int>::const_iterator beginIt);
-    bool addToTour(unsigned int nodeToAdd);
+    // work space for the searches (epoch-stamped so nothing has to be cleared)
+    std::vector<unsigned int> stamp;
+    std::vector<unsigned short> owner;
+    unsigned int epoch = 0;
 
-    void createSubTour(Node * pNode, std::list< Node * > * subTourToLoad);
-    void rerootSubTour(Node * newRoot, std::list< Node * > * subTourToLoad);
-    void rerootAndReassignSubTour(Node * newRoot, std::list< Node * > * subTourToLoad);
+    // compatibility views, built on demand
+    std::map<unsigned int, Node> nodes;
+    std::map<unsigned int, std::list< Node *> > tours;
 
-    void printList(std::string text, std::list< Node * > * list);
-    //void resetRootNodesInSubTour(std::list<Node *> * subTour);
-    void resetRootNodesInSubTourOfTour(std::list<Node *> * subTour);
-    bool validateTour(std::list<Node *> * tourtocheck);
+    void attach(PointSetModel * model);
+    int newLabel();
+    void relabelComponent(unsigned int start, int from, int to);
+    void labelAll(const std::vector<unsigned int> & points);
+    void buildCompatibilityViews();
+    unsigned int nextEpoch();
 
 public:
-    // pass in iterator to beginning of selected lattice points that are sorted upto WorkingLimit
-    // want to use this Class to determine connectivity of a graph
-    // Connectivity is the numberOfComponents
-    //
     EulerTour();
     EulerTour(std::vector<unsigned int>::const_iterator beginIt, const unsigned int workingLimit, PointSetModel *pModel);
     EulerTour(std::vector<unsigned int> & indices, const unsigned int workingLimit, PointSetModel *pModel);
     EulerTour(std::set<unsigned int> & beginIt, PointSetModel *pModel);
 
-    EulerTour(const EulerTour &e2);
+    EulerTour(const EulerTour &e2) = default;
+    EulerTour(EulerTour && moveit) noexcept = default;
+    EulerTour & operator=(const EulerTour & tourtomove) = default;
+    EulerTour & operator=(EulerTour && tourtomove) noexcept = default;
+    ~EulerTour() = default;
 
-    ~EulerTour(){
-        for(auto & tour : tours){
-            for(auto & ele : tour.second){
-                ele = nullptr;
-            }
-            tour.second.clear();
-        }
-        tours.clear();
-        nodes.clear();
-    }
-
-    void swap(EulerTour & other) noexcept {
-        using std::swap;
-        std::swap(nodes, other.nodes);
-        other.totalComponents = totalComponents;
-        std::swap(tours, other.tours);
-    }
-
-
-    // copy assignment
-    EulerTour & operator=(const EulerTour & tourtomove) {
-
-        EulerTour tmp(tourtomove);
-        tmp.swap(*this);
-
-        return *this;
-    }
-
-    // terrible move constructor
-    EulerTour(EulerTour && moveit) noexcept {
-        totalComponents = moveit.totalComponents;
-
-        for(auto & node : moveit.nodes){
-            nodes.emplace(node.first, Node(node.second));
-        }
-
-
-        for(auto & e2Tour : moveit.tours){ // making a new copy
-
-            auto pair = tours.emplace(e2Tour.first, std::list< Node *>()); // make new tour
-            std::list<Node *> * pListIt = &(*pair.first).second;
-
-            for(auto & lit : e2Tour.second){
-                unsigned int keytocopy = lit->getKey();
-                pListIt->push_back(&(*nodes.find(keytocopy)).second);
-            }
-        }
-
-        nodes.clear();
-        tours.clear();
-    }
+    void swap(EulerTour & other) noexcept { std::swap(*this, other); }
 
     unsigned int addNode(unsigned int latticePoint, PointSetModel *pModel);
     unsigned int removeNode(unsigned int indexOfNode);
@@ -137,16 +103,20 @@ public:
 
     void createInitialTour(unsigned int workingLimit, PointSetModel *pModel, std::vector<unsigned int> &indices);
 
+    // consistency checks against a full recount: validateList returns true on ERROR, validateNodes true if OK (as before)
     bool validateList(std::string text);
     bool validateNodes(std::string str);
+    unsigned int countComponentsBruteForce() const;
 
     void printTourInfo(){
+        buildCompatibilityViews();
         for(auto & tour : tours){
             std::cout << "TOUR : " << tour.first << " SIZE : " << tour.second.size() << std::endl;
         }
     }
 
     const std::list<Node *> * const getPointerToLargestTour(){
+        buildCompatibilityViews();
         unsigned int max = 0;
         std::list< Node *> * pList = nullptr;
         for(auto & tour : tours){
@@ -158,7 +128,7 @@ public:
         return pList;
     }
 
-    std::map<unsigned int, std::list< Node *> > * getTours(){ return &tours;} // key is the root of the tour
+    std::map<unsigned int, std::list< Node *> > * getTours(){ buildCompatibilityViews(); return &tours;}
 };
 
 

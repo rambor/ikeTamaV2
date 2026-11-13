@@ -139,7 +139,7 @@ float Anneal::surfaceToVolume(const unsigned int total, std::vector<float> & wei
 void Anneal::populateContactsDistribution(std::vector<double> & distribution, std::set<unsigned int> *beads_in_use, PointSetModel *pModel){
 
     for(int i=0; i<13; i++){
-        distribution[i]=0.0d;
+        distribution[i]=0.0;
     }
 
     for (auto const & it : *beads_in_use){
@@ -179,9 +179,17 @@ unsigned int Anneal::numberOfContactsFromSet(std::set<unsigned int> *beads_in_us
  * @param pModel
  * @param pData
  */
+// direct mode: P(r) change for adding (sign +1) or removing (-1) a bead, binning the distances on the fly
+void Anneal::directPr(const unsigned int bead, const unsigned int * ptr, const unsigned int upperLimit, std::vector<unsigned int> & prBins, int sign){
+    const vector3 & v = dmModel->getBead(bead)->getVec();
+    for (unsigned int i=0; i<upperLimit; i++){ if (ptr[i] == bead) continue;
+        prBins[ dmData->convertToBin((v - dmModel->getBead(ptr[i])->getVec()).length()) ] += sign; }
+}
+
 void Anneal::fillPrBinsAndAssignTotalBin(PointSetModel * pModel, PofRData * pData){
 
     maxbin = pModel->populateBins(pData); // populate the entire over entire Universe
+    dmModel = pModel; dmData = pData;     // for direct mode (bins not stored)
 
     maxbin += 1;
 
@@ -204,7 +212,11 @@ void Anneal::fillPrBinsAndAssignTotalBin(PointSetModel * pModel, PofRData * pDat
  * @param pData
  * @return
  */
-void Anneal::calculateModelPrDistributionDirect(std::vector<unsigned int> *bead_indices, std::vector<unsigned int> *binCount, const unsigned int workingLimit, PointSetModel *pModel, PofRData *pData){
+void Anneal::calculateModelPrDistributionDirect(std::vector<unsigned int> *bead_indices,
+    std::vector<unsigned int> *binCount,
+    const unsigned int workingLimit,
+    PointSetModel *pModel,
+    PofRData *pData){
 
     // calculate distribution
     // go through entire distance vector, count only those that are kept
@@ -312,7 +324,7 @@ void Anneal::calculateModelPrDistributionSymCE(std::vector<unsigned int> *subUni
 //        }
 //    }
 
-    std::fill(contactsDistributionOfModel.begin(), contactsDistributionOfModel.end(), 0.0d);
+    std::fill(contactsDistributionOfModel.begin(), contactsDistributionOfModel.end(), 0.0);
     violations=0;
     unsigned int tempContacts;
     for(unsigned int ind=0; ind<indicesWorkingLimit; ind++){
@@ -405,9 +417,10 @@ void Anneal::recalculateDeadLimit(unsigned int workingLimit, std::vector<unsigne
 }
 
 /**
- * Calcualte P(r) distribution using selected set of bead_indices (bead indices must be sorted!)
+ * Calculate P(r) distribution using selected set of bead_indices (bead indices must be sorted!)
  * binCount is a small vector
  * Should not use if max index of pModelBin is greater than unsigned_int max
+ * Uses the binned distances to update the distribution
  * @param bead_indices
  * @param binCount
  * @param workingLimit
@@ -415,7 +428,12 @@ void Anneal::recalculateDeadLimit(unsigned int workingLimit, std::vector<unsigne
  * @param pModel
  * @return
  */
-void Anneal::calculateModelPrDistribution(std::vector<unsigned int> *bead_indices, std::vector<unsigned int> *binCount, unsigned int workingLimit, unsigned int totalBeadsInSphere, PointSetModel *pModel) {
+void Anneal::calculateModelPrDistribution(
+    std::vector<unsigned int> *bead_indices,
+    std::vector<unsigned int> *binCount,
+    unsigned int workingLimit,
+    unsigned int totalBeadsInSphere,
+    PointSetModel *pModel) {
 
     // calculate distribution
     // go through entire distance vector, count only those that are kept
@@ -425,6 +443,7 @@ void Anneal::calculateModelPrDistribution(std::vector<unsigned int> *bead_indice
     unsigned int row;
     unsigned int row2;
     const unsigned short int * pModelBin = pModel->getPointerToBins();
+    if (pModelBin == nullptr){ calculateModelPrDistributionDirect(bead_indices, binCount, workingLimit, pModel, dmData); return; }
 
     //const int * pBeadIndices = &(*bead_indices)[0];
     const unsigned int * ptr = (*bead_indices).data();
@@ -445,7 +464,6 @@ void Anneal::calculateModelPrDistribution(std::vector<unsigned int> *bead_indice
             (*binCount)[ *( pModelBin + ((row2 + ptr[n]) - 1) ) ]++;
         }
     }
-
 }
 
 
@@ -578,19 +596,19 @@ double Anneal::connectivityPotential(unsigned int numberOfComponents){
 
     switch(numberOfComponents) {
         case 1:
-            return 0.0d;
+            return 0.0;
         case 2:
-            return 0.1d;
+            return 0.1;
         case 3:
-            return 0.30d;
+            return 0.30;
         case 4:
-            return 0.70d;
+            return 0.70;
         case 5:
-            return 100000.0d;
+            return 100000.0;
         case 6:
-            return 1000000.0d;
+            return 1000000.0;
         default:
-            return 1000000.0d*numberOfComponents;
+            return 1000000.0*numberOfComponents;
     }
 }
 
@@ -759,7 +777,8 @@ float Anneal::getProbabilityOfSelectedIndex(std::set<unsigned int> *beads_in_use
  */
 unsigned int Anneal::getUseableNeighborWeighted(std::set<unsigned int> *beads_in_use,
                                                PointSetModel *pModel,
-                                               unsigned int & selectedIndex){
+                                               unsigned int & selectedIndex,
+                                               std::mt19937 & gen){
 
 
     const unsigned int * ptr = pModel->getDirectPointerToNeighborhood();
@@ -781,16 +800,15 @@ unsigned int Anneal::getUseableNeighborWeighted(std::set<unsigned int> *beads_in
         }
     }
 
-    std::random_device rd;
-    std::mt19937 gen(rd());
     std::uniform_real_distribution<double> randomProb(0,1);
 
+    // if bead is singly connected, it would have 11 available spots, so 11/12 probability of being used
     if (randomProb(gen) < (double)countAvailable/((double)totalNeighbors)){
         std::uniform_int_distribution<unsigned int> randomIndex(0,countAvailable-1);
         return possibleNeighbors[randomIndex(gen)];
-    } else {
-        return neighborLimit;
     }
+
+    return neighborLimit;
 }
 
 /**
@@ -842,13 +860,61 @@ unsigned int Anneal::getUseableNeighborFromSetCE(std::set<unsigned int> *beads_i
  * get set of neighbors that are available
  * randomly select one
  */
+/**
+ * As getUseableNeighborFromSet / getUseableNeighborWeighted (std::set versions below): same candidates in the
+ * same order and the same random draws, with occupancy read from the ContactTracker and no heap allocation.
+ */
+unsigned int Anneal::getUseableNeighborFromSet(const ContactTracker & occupancy, PointSetModel *pModel, unsigned int selectedIndex, std::mt19937 & gen){
+    const unsigned int * ptr = pModel->getDirectPointerToNeighborhood() + (size_t)pModel->getSizeOfNeighborhood()*selectedIndex;
+    const unsigned int totalNeighbors = pModel->getSizeOfNeighborhood();
+    const unsigned int neighborLimit = pModel->getNeighborLimit();
+    unsigned int possibleNeighbors[64];
+    unsigned int count=0;
+    for (unsigned int i=0; i< totalNeighbors; i++){
+        const unsigned int neighbor = ptr[i];
+        if (neighbor < neighborLimit && !occupancy.occupied(neighbor)){
+            possibleNeighbors[count++] = neighbor;
+        } else if (neighbor == neighborLimit) {
+            break;
+        }
+    }
+    if (count==0) return neighborLimit;
+    if (count == 1) return possibleNeighbors[0];
+    std::uniform_int_distribution<unsigned int> randomIndex(0,count-1);
+    return possibleNeighbors[randomIndex(gen)];
+}
+
+unsigned int Anneal::getUseableNeighborWeighted(const ContactTracker & occupancy, PointSetModel *pModel, unsigned int selectedIndex, std::mt19937 & gen){
+    const unsigned int * ptr = pModel->getDirectPointerToNeighborhood() + (size_t)pModel->getSizeOfNeighborhood()*selectedIndex;
+    const unsigned int totalNeighbors = pModel->getSizeOfNeighborhood();
+    const unsigned int neighborLimit = pModel->getNeighborLimit();
+    unsigned int possibleNeighbors[64];
+    unsigned int countAvailable=0;
+    for (unsigned int i=0; i< totalNeighbors; i++){
+        const unsigned int neighbor = ptr[i];
+        if (neighbor < neighborLimit && !occupancy.occupied(neighbor)){
+            possibleNeighbors[countAvailable++] = neighbor;
+        } else if (neighbor == neighborLimit) {
+            break;
+        }
+    }
+    std::uniform_real_distribution<double> randomProb(0,1);
+    if (randomProb(gen) < (double)countAvailable/((double)totalNeighbors)){
+        std::uniform_int_distribution<unsigned int> randomIndex(0,countAvailable-1);
+        return possibleNeighbors[randomIndex(gen)];
+    }
+    return neighborLimit;
+}
+
+
 unsigned int Anneal::getUseableNeighborFromSet(std::set<unsigned int> *beads_in_use,
                                                PointSetModel *pModel,
-                                               unsigned int & selectedIndex){
+                                               unsigned int & selectedIndex,
+                                               std::mt19937 & gen){
 
 
     const unsigned int * ptr = pModel->getDirectPointerToNeighborhood();
-    //const std::vector<unsigned int>::iterator it = pModel->getPointerToNeighborhood(selectedIndex);
+    // const std::vector<unsigned int>::iterator it = pModel->getPointerToNeighborhood(selectedIndex);
     // go through each member of the neighborhood
     // determine their current energy state and after if bead is moved
     const unsigned int totalNeighbors = pModel->getSizeOfNeighborhood();
@@ -871,13 +937,12 @@ unsigned int Anneal::getUseableNeighborFromSet(std::set<unsigned int> *beads_in_
     // what happens if no neighbors?
     if (count==0){
         return neighborLimit;
-    } else if (count == 1){
+    }
+
+    if (count == 1){
         return possibleNeighbors[0];
     }
 
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
     std::uniform_int_distribution<unsigned int> randomIndex(0,count-1);
 
     return possibleNeighbors[randomIndex(gen)];
@@ -971,61 +1036,8 @@ unsigned int Anneal::removeFromPrSym(unsigned int const &removeMeSubUnitIndex, s
             break;
         }
     }
-
-    const unsigned int stopAt = findIt;
-    //
-    // remove interdomain distances
-    //
-    float distance_to;
-
-    const unsigned int subUnits = pModel->getNumberOfSubUnits();
-    const unsigned int totalCoordinates = subUnits*workingLimit;
-    std::vector<vector3> coordinates(totalCoordinates);
-
-    // create first subunit from selected indices and populate coordinates
-    for (unsigned int i=0; i < workingLimit; i++){
-        coordinates[i] = pModel->getBead(ptr[i])->getVec();
-    }
-
-    unsigned int count = workingLimit;
-    for (unsigned int s=1; s < subUnits; s++){  // create sym related subunits and add to coordinates vector
-        pModel->transformCoordinatesBySymmetryPreCalc(s, workingLimit, count, coordinates);
-    }
-
-
-    // adjust Pr
-    for (unsigned int s=0; s < subUnits; s++){  // create sym related subunits and add to coordinates vector
-        unsigned int basis = stopAt+s*workingLimit;
-        const vector3 * prefVec = &coordinates[basis];
-
-        for (unsigned int next_i = 0; next_i < basis; next_i++) {
-            // calculate distance and convert to bin
-            distance_to = ((*prefVec) - coordinates[next_i]).length();
-            --prBins[pData->convertToBin(distance_to)]; // some distances will exceed dmax
-        }
-
-        for (unsigned int next_i = basis+1; next_i < totalCoordinates; next_i++) {
-            // calculate distance and convert to bin
-            distance_to = ((*prefVec) - coordinates[next_i]).length();
-            --prBins[pData->convertToBin(distance_to)]; // some distances will exceed dmax
-        }
-    }
-
-
-    /**
-     *
-     * we double remove(count) the symmetry related vectors, need to add back
-     */
-    for (unsigned int s=0; s < subUnits; s++){  // create sym related subunits and add to coordinates vector
-        unsigned int basis = stopAt+s*workingLimit;
-        const vector3 * prefVec = &coordinates[basis];
-
-        for (unsigned int ss=s+1; ss < subUnits; ss++){
-            distance_to = ((*prefVec) - coordinates[stopAt+ss*workingLimit]).length();
-            ++prBins[pData->convertToBin(distance_to)]; // some distances will exceed dmax
-        }
-    }
-
+    ensureSymmetryCache(pModel);
+    removeFromPrSymAt(findIt, beadsInUse, workingLimit, prBins, pData);
     return 0;
 }
 
@@ -1043,86 +1055,120 @@ unsigned int Anneal::removeFromPrSym(unsigned int const &removeMeSubUnitIndex, s
 */
 unsigned int Anneal::addToPrSym(unsigned int addMeSubUnitIndex, std::vector<unsigned int> & beadsInUse, unsigned int const &workingLimit, std::vector<unsigned int> & prBins, PointSetModel *pModel, PofRData *pData){
     // each bead has a sym related partner in pModel
-    // get coordinate of selectedBead and calculate distance to all other selected beads and convert to bin
-
+    // (the original loop "for(unsigned int i=wl-1; i>=0; i--)" never ended if the bead was missing: i is unsigned)
     unsigned int findIt=0;
     const unsigned int * const ptr = beadsInUse.data();
-    for(unsigned int i=(workingLimit-1); i>=0; i--){
+    for(unsigned int i=workingLimit; i-- > 0; ){
         if (ptr[i] == addMeSubUnitIndex){
             findIt = i;
             break;
         }
     }
 
-    const int stopAt = findIt;
-    // add interdomain distances
-    //
-    // get coordinate of selectedBead and calculate distance to all other selected beads and convert to bin
-    unsigned int subUnits = pModel->getNumberOfSubUnits();
-    const unsigned int totalCoordinates = subUnits*workingLimit;
-    std::vector<vector3> coordinates(totalCoordinates);
-
-    vector3 * const pC = coordinates.data();
-
-    // create first subunit from selected indices and populate coordinates
-    for (unsigned int i=0; i < workingLimit; i++){
-        pC[i] = pModel->getBead(ptr[i])->getVec();
-    }
-
-    unsigned int count = workingLimit;
-    for (unsigned int s=1; s < subUnits; s++){  // create sym related subunits and add to coordinates vector
-        pModel->transformCoordinatesBySymmetryPreCalc(s, workingLimit, count, coordinates);
-    }
-
-    // adjust Pr
-    float distance_to;
-    for (unsigned int s=0; s < subUnits; s++){  //
-        unsigned int basis = stopAt+s*workingLimit;
-        const vector3 * prefVec = &pC[basis];
-
-        for (unsigned int next_i = 0; next_i < basis; next_i++) {
-            // calculate distance and convert to bin
-            distance_to = ((*prefVec) - pC[next_i]).length();
-            ++prBins[pData->convertToBin(distance_to)]; // some distances will exceed dmax
-        }
-
-        for (unsigned int next_i = basis+1; next_i < totalCoordinates; next_i++) {
-            // calculate distance and convert to bin
-            distance_to = ((*prefVec) - pC[next_i]).length();
-            ++prBins[pData->convertToBin(distance_to)]; // some distances will exceed dmax
-        }
-    }
-
+    ensureSymmetryCache(pModel);
+    addToPrSymAt(findIt, beadsInUse, workingLimit, prBins, pData);
     /*
-     * correct for double counting
-     */
-    for (unsigned int s=0; s < subUnits; s++){  // create sym related subunits and add to coordinates vector
-        unsigned int basis = stopAt+s*workingLimit;
-        const vector3 * prefVec = &pC[basis];
-
-        for (unsigned int ss=s+1; ss < subUnits; ss++){
-            distance_to = ((*prefVec) - pC[stopAt+ss*workingLimit]).length();
-            --prBins[pData->convertToBin(distance_to)]; // some distances will exceed dmax
-        }
-    }
-    /*
-     * Should include contacts distribution
-     *
-     *
      * count any symmetry related clashes
      */
-    unsigned int totalviolations=0;
-    for (unsigned int i=0; i < workingLimit; i++){
-        const vector3 * pBase = &pC[i];
-        for (unsigned int next=workingLimit; next < totalCoordinates; next++){
-            distance_to = ((*pBase) - pC[next]).length();
-            if (distance_to < violation_limit){
-                ++totalviolations;
+    ensureClashTable(pModel);
+    return clashes.countFor(beadsInUse.begin(), workingLimit);
+}
+
+
+/**
+ * Coordinates of every lattice point and of its symmetry mates, made once with
+ * transformCoordinatesBySymmetryPreCalc (the per-move rebuilding in addToPrSym/removeFromPrSym/getViolations
+ * produced exactly these numbers, point by point).
+ */
+void Anneal::ensureSymmetryCache(PointSetModel * pModel){
+    const unsigned int N = pModel->getTotalNumberOfBeadsInUniverse();
+    const unsigned int S = pModel->getNumberOfSubUnits();
+    if (symCacheModel == pModel && symCacheN == N && symCacheSubUnits == S) return;
+    symCoords.assign((size_t)S*N, vector3());
+    for (unsigned int i=0; i<N; i++) symCoords[i] = pModel->getBead(i)->getVec();
+    unsigned int count = N;
+    for (unsigned int s=1; s<S; s++) pModel->transformCoordinatesBySymmetryPreCalc(s, N, count, symCoords);
+    symCacheModel = pModel; symCacheN = N; symCacheSubUnits = S;
+    clashLimit = -1.0f; // clash table depends on the coordinates
+}
+
+void Anneal::ensureInterfaceTable(PointSetModel * pModel){
+    ensureSymmetryCache(pModel);
+    const unsigned int N = symCacheN, S = symCacheSubUnits;
+    if (ifaceMin == 0 || S < 2){ ifaceOn = false; return; }
+    const float limit = 2.0f*pModel->getBeadRadius()*1.05f;          // lattice neighbours of a mate bead
+    if (ifaceOn && ifaceLimit == limit && interfaces.isBuilt()) return;
+    std::vector<char> use(S, 0);
+    const unsigned int n = pModel->getSymmetryIndex();
+    for (unsigned int s : pModel->getNeighboringSubunits()) if (s < S){ use[s] = 1; if (s < n && n > s) use[n - s] = 1; }   // +-1 rotation (and the two-fold for Dn)
+    std::vector<vector3> coords(symCoords.begin(), symCoords.begin() + N);
+    std::vector<vector3> mates(symCoords.begin() + N, symCoords.end());
+    interfaces.build(coords, mates, S, limit, &use);
+    ifMates.clear(); for (unsigned int s=1; s<S; s++) if (use[s]) ifMates.push_back(s);
+    ifaceLimit = limit; ifaceOn = true;
+    std::string list; for (unsigned int s=1; s<S; s++) if (use[s]) list += " " + std::to_string(s);
+    logger("INTERFACE MATES", list);
+    logger("INTERFACE MIN CONTACTS", std::to_string(ifaceMin));
+}
+
+void Anneal::ensureClashTable(PointSetModel * pModel){
+    ensureSymmetryCache(pModel);
+    if (clashes.isBuilt() && clashLimit == violation_limit) return;
+    const unsigned int N = symCacheN, S = symCacheSubUnits;
+    std::vector<vector3> coords(symCoords.begin(), symCoords.begin() + N);
+    std::vector<vector3> mates(symCoords.begin() + N, symCoords.end());
+    clashes.build(coords, mates, S, violation_limit);
+    clashLimit = violation_limit;
+}
+
+/*
+ * P(r) change for adding/removing the bead at beadsInUse[index] (and its mates), same distances as before
+ */
+void Anneal::addToPrSymAt(unsigned int index, const std::vector<unsigned int> & beadsInUse, unsigned int workingLimit, std::vector<unsigned int> & prBins, PofRData *pData){
+    const unsigned int N = symCacheN, S = symCacheSubUnits;
+    const unsigned int a = beadsInUse[index];
+    const unsigned int * const ptr = beadsInUse.data();
+    unsigned int * const bins = prBins.data();
+    for (unsigned int s=0; s < S; s++){
+        const vector3 & prefVec = symCoords[(size_t)s*N + a];
+        for (unsigned int t=0; t < S; t++){
+            const vector3 * const mate = &symCoords[(size_t)t*N];
+            for (unsigned int i=0; i < workingLimit; i++){
+                if (t == s && i == index) continue;
+                ++bins[pData->convertToBin((prefVec - mate[ptr[i]]).length())];
             }
         }
     }
+    // pairs between mates of the same bead were counted twice
+    for (unsigned int s=0; s < S; s++){
+        const vector3 & prefVec = symCoords[(size_t)s*N + a];
+        for (unsigned int ss=s+1; ss < S; ss++){
+            --bins[pData->convertToBin((prefVec - symCoords[(size_t)ss*N + a]).length())];
+        }
+    }
+}
 
-    return totalviolations;
+void Anneal::removeFromPrSymAt(unsigned int index, const std::vector<unsigned int> & beadsInUse, unsigned int workingLimit, std::vector<unsigned int> & prBins, PofRData *pData){
+    const unsigned int N = symCacheN, S = symCacheSubUnits;
+    const unsigned int a = beadsInUse[index];
+    const unsigned int * const ptr = beadsInUse.data();
+    unsigned int * const bins = prBins.data();
+    for (unsigned int s=0; s < S; s++){
+        const vector3 & prefVec = symCoords[(size_t)s*N + a];
+        for (unsigned int t=0; t < S; t++){
+            const vector3 * const mate = &symCoords[(size_t)t*N];
+            for (unsigned int i=0; i < workingLimit; i++){
+                if (t == s && i == index) continue;
+                --bins[pData->convertToBin((prefVec - mate[ptr[i]]).length())];
+            }
+        }
+    }
+    for (unsigned int s=0; s < S; s++){
+        const vector3 & prefVec = symCoords[(size_t)s*N + a];
+        for (unsigned int ss=s+1; ss < S; ss++){
+            ++bins[pData->convertToBin((prefVec - symCoords[(size_t)ss*N + a]).length())];
+        }
+    }
 }
 
 /**
@@ -1134,50 +1180,9 @@ unsigned int Anneal::addToPrSym(unsigned int addMeSubUnitIndex, std::vector<unsi
  * @return
  */
 unsigned int Anneal::getViolations(std::vector<unsigned int> *subUnit_indices, const unsigned int indicesWorkingLimit, PointSetModel *pModel){
-
-    const unsigned int subUnits = pModel->getNumberOfSubUnits();
-    const unsigned int totalCoordinates = subUnits*indicesWorkingLimit;
-    std::vector<vector3> coordinates(totalCoordinates);
-
-//    vector3 * tempVec1;
-//    Bead * tempBead;
-
-    // create first subunit from selected indices and populate coordinates
-    for (unsigned int i=0; i < indicesWorkingLimit; i++){
-//        tempBead = pModel->getBead((*subUnit_indices)[i]);
-        coordinates[i] = pModel->getBead((*subUnit_indices)[i])->getVec(); // copy assignment
-//        tempVec1 = &coordinates[i];
-//        (*tempVec1).x = tempBead->getX();
-//        (*tempVec1).y = tempBead->getY();
-//        (*tempVec1).z = tempBead->getZ();
-    }
-
-    unsigned int count = indicesWorkingLimit;
-    for (unsigned int s=1; s < subUnits; s++){  // create sym related subunits and add to coordinates vector
-        pModel->transformCoordinatesBySymmetryPreCalc(s, indicesWorkingLimit, count, coordinates);
-    }
-
-//    std::string nameOf = "violations.pdb";
-//    FILE * pFile = fopen(nameOf.c_str(), "a");
-
-    float distance_to;
-    unsigned int violations = 0;
-    // count violations
-    for(unsigned int i=0; i<indicesWorkingLimit; i++) {
-
-        const vector3 *baseVec = &coordinates[i];
-        for (unsigned int s = indicesWorkingLimit; s < totalCoordinates; s++) {
-            distance_to = ((*baseVec) - coordinates[s]).length();
-            if (distance_to < violation_limit){
-//                pModel->printAtomLine(pFile, s, "A", s, coordinates[s].x, coordinates[s].y, coordinates[s].z);
-                violations++;
-            }
-        }
-    }
-
-//    fclose(pFile);
-    // check for connectivity
-    return violations;
+    // same count as comparing every bead with every symmetry mate, from the precomputed clash partners
+    ensureClashTable(pModel);
+    return clashes.countFor(subUnit_indices->begin(), indicesWorkingLimit);
 }
 
 /**
@@ -1190,95 +1195,12 @@ unsigned int Anneal::getViolations(std::vector<unsigned int> *subUnit_indices, c
  */
 unsigned int Anneal::getViolationsFromSet(std::set<unsigned int> *subUnit_indices, std::vector<double> & contactsDistributionOfModel, const unsigned int indicesWorkingLimit, PointSetModel *pModel){
 
-
-    const unsigned int subUnits = pModel->getNumberOfSubUnits();
-    const unsigned int totalCoordinates = subUnits*indicesWorkingLimit;
-    std::vector<vector3> coordinates(totalCoordinates);
-
-
-    // create first subunit from selected indices and populate coordinates
-    vector3 * const ptr = coordinates.data();
-    unsigned int index=0;
-    for(auto & ind : *subUnit_indices){ // sorted in order because of set
-        ptr[index] = pModel->getBead(ind)->getVec();
-        index++;
-    }
-
-    unsigned int count = indicesWorkingLimit;
-    for (unsigned int s=1; s < subUnits; s++){  // create sym related subunits and add to coordinates vector
-        pModel->transformCoordinatesBySymmetryPreCalc(s, indicesWorkingLimit, count, coordinates);
-    }
-
-
-//    std::string nameOf = "violations.pdb";
-//    FILE * pFile = fopen(nameOf.c_str(), "a");
-
-    float distance_to;
-    unsigned int violations = 0;
-    std::fill(contactsDistributionOfModel.begin(), contactsDistributionOfModel.end(), 0.0d);
-    // count violations
-    index=0;
+    std::fill(contactsDistributionOfModel.begin(), contactsDistributionOfModel.end(), 0.0);
     for(auto & ind : *subUnit_indices){
-        unsigned int tempContacts = numberOfContactsFromSet(subUnit_indices, pModel, ind);
-        const vector3 *baseVec = &ptr[index];
-
-        for (unsigned int s = indicesWorkingLimit; s < totalCoordinates; s++) {
-            distance_to = ((*baseVec) - ptr[s]).length();
-
-            //           if (distance_to < contactCutOff){ // this includes additional symmetry mate contacts
-            //               tempContacts++;
-            if (distance_to < violation_limit){
-//                    pModel->printAtomLine(pFile, s, "A", s, ptr[s].x, ptr[s].y, ptr[s].z);
-                violations++;
-            }
-            //           }
-        }
-        index++;
-        //       tempContacts = (tempContacts > 12) ? 12 : tempContacts;
-        ++contactsDistributionOfModel[tempContacts];
+        ++contactsDistributionOfModel[numberOfContactsFromSet(subUnit_indices, pModel, ind)];
     }
-
-//    fclose(pFile);
-    // entire Symmetry made molecule
-//    for(unsigned int index=0;index<totalCoordinates; index++){
-//        const vector3 *baseVec = &ptr[index];
-//        unsigned int counter=0;
-//        for(unsigned int index2=index+1;index2<totalCoordinates; index2++){
-//            const vector3 *baseVec2 = &ptr[index2];
-//            distance_to = (*baseVec - *baseVec2).length();
-//            if (distance_to < contactCutOff){
-//                counter++;
-//                if (counter >= 12){
-//                    break;
-//                }
-//            }
-//        }
-//        ++contactsDistributionOfModel[counter];
-//    }
-
-
-//    for(auto & ind : *subUnit_indices){
-//        unsigned int tempContacts = numberOfContactsFromSet(subUnit_indices, pModel, ind);
-//        const vector3 *baseVec = &ptr[index];
-//
-//        for (unsigned int s = indicesWorkingLimit; s < totalCoordinates; s++) {
-//            distance_to = ((*baseVec) - ptr[s]).length();
-//
-//            if (distance_to < contactCutOff){
-//                tempContacts++;
-//                if (distance_to < violation_limit){
-//                    violations++;
-//                }
-//            }
-//        }
-//        index++;
-//
-//        tempContacts = (tempContacts > 12) ? 12 : tempContacts;
-//        ++contactsDistributionOfModel[tempContacts];
-//    }
-
-    // check for connectivity
-    return violations;
+    ensureClashTable(pModel);
+    return clashes.countFor(subUnit_indices->begin(), (unsigned int)subUnit_indices->size());
 }
 
 
@@ -1323,8 +1245,10 @@ void Anneal::printParameters(std::vector<float> * accept, std::vector<double> * 
 
     std::string index;
 
+    float invTotal = 1.0/static_cast<float>(total);
+
     for (int i=0; i < total; i++){
-        fprintf(pFile, "%i %.5E %0.9f %0.9f %i\n", (i+1), (*accept)[i], (*temp)[i], (*divergence)[i], (*wl)[i] );
+        fprintf(pFile, "%.4f %.5E %0.9f %0.9f %i\n", (i+1)*invTotal, (*accept)[i], (*temp)[i], (*divergence)[i], (*wl)[i] );
     }
 
     fclose(pFile);
@@ -1647,9 +1571,9 @@ double Anneal::estimateMagnitudeOfDifferenceContactsPotential(unsigned int worki
 
         } else { //add
 
-            unsigned int addMe = getUseableNeighborFromSet(&beads_in_use_tree, pModel, bead_indices[randomIndex(gen)]);
+            unsigned int addMe = getUseableNeighborFromSet(&beads_in_use_tree, pModel, bead_indices[randomIndex(gen)], gen);
             while(addMe == noNeigborIndex){
-                addMe = getUseableNeighborFromSet(&beads_in_use_tree, pModel, bead_indices[randomIndex(gen)]);
+                addMe = getUseableNeighborFromSet(&beads_in_use_tree, pModel, bead_indices[randomIndex(gen)], gen);
             }
 
             auto itIndex = std::find(bead_indices.begin() + workingLimit, bead_indices.end(), addMe);
@@ -1666,5 +1590,5 @@ double Anneal::estimateMagnitudeOfDifferenceContactsPotential(unsigned int worki
 
     }
 
-    return deltaContacts/101.0d;
+    return deltaContacts/101.0;
 }

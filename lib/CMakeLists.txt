@@ -39,8 +39,11 @@ addToIt(DensityMapper)
 addToIt(LatticePoint)
 
 set(TEST_OBJ ${CMAKE_PROJECT_NAME}_test) # picked up in CLION
+list(APPEND CPP_FILES "${CMAKE_SOURCE_DIR}/src/DensityRefiner.cpp")
+
+MESSAGE("** TEST FILES => ${CPP_FILES}")
 add_executable(${TEST_OBJ} ${CPP_FILES})
 
 target_link_libraries(${TEST_OBJ}
-        ${BOOST_FILESYSTEM} ${BOOST_PO} ${BOOST_RANDOM} ${BOOST_REGEX} ${BOOST_SYSTEM}
+        ${BOOST_FILESYSTEM_LIB} ${BOOST_PO_LIB} ${BOOST_RANDOM_LIB} ${BOOST_REGEX_LIB} ${BOOST_SYSTEM_LIB}
         ${QHULL_LIB} ${QHULLCPP_LIB} ${SASTools_LIB} gtest gtest_main)

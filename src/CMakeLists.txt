@@ -8,6 +8,9 @@ list(APPEND SOURCE_FILES
         "${CMAKE_CURRENT_LIST_DIR}/Anneal.cpp"
         "${CMAKE_CURRENT_LIST_DIR}/Objective.cpp"
         "${CMAKE_CURRENT_LIST_DIR}/DensityMapper.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/DensityRefiner.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/HullVolumeCache.h"
+        "${CMAKE_CURRENT_LIST_DIR}/AnnealTrackers.h"
         )
 
 MESSAGE("** SOURCE FILES => ${SOURCE_FILES}")

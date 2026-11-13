@@ -27,12 +27,17 @@
 #include <algorithm>
 #include <ctime>
 #include <random>
+#include <utility>
+#include <chrono>
+#include <array>
+#include <cstring>
 
 #include "PointSetModel.h"
 #include "KDE.h"
 #include "../EulerTour/EulerTour.h"
 #include "Component.h"
 #include <sastools/utils.h>
+#include "AnnealTrackers.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,6 +51,23 @@ class Component; // forward declaration
 struct ProbabilityBead;
 
 class Anneal {
+    friend struct AnnealTestAccess;   // unit tests (test/unit_tests.cpp)
+
+    // --- schedule: (fraction of run, contact share of the typical energy change), piecewise linear
+    struct WeightSchedule {
+        std::vector<std::pair<double,double>> pts;
+        double at(double t) const {
+            if (t <= pts.front().first) return pts.front().second;
+            for (size_t i = 1; i < pts.size(); i++)
+                if (t <= pts[i].first) {
+                    double u = (t - pts[i-1].first) / (pts[i].first - pts[i-1].first);
+                    return pts[i-1].second + u * (pts[i].second - pts[i-1].second);
+                }
+            return pts.back().second;
+        }
+    };
+
+
     struct Trial{
         double value;
         std::vector<unsigned int> indices;
@@ -84,9 +106,63 @@ class Anneal {
 
     std::vector<Component> components;
 
+    // random seed: 0 = seed from the clock / random_device as before; otherwise runs are reproducible
+    unsigned long rngSeed = 0;
+    unsigned int seedForRun(unsigned int offset){
+        if (rngSeed != 0) return (unsigned int)(rngSeed + offset);
+        if (offset == 0) { std::random_device rd; return rd(); }
+        return (unsigned int)std::chrono::high_resolution_clock::now().time_since_epoch().count();
+    }
 
+    // symmetry: coordinates of every lattice point and its mates, computed once per model (see ensureSymmetryCache)
+    PointSetModel * symCacheModel = nullptr;
+    unsigned int symCacheN = 0, symCacheSubUnits = 0;
+    std::vector<vector3> symCoords;             // symCoords[s*N + i] = mate s of lattice point i (s = 0 is the point)
+    ClashTracker clashes;
+    // interface requirement (symmetry): contacts between the asymmetric unit and the mates that connect the assembly
+    // (Cn: rotations by +-360/n; Dn: also the two-fold). Penalty ifaceWeight * (missing contacts)^2; ifaceMin = 0: off.
+    ClashTracker interfaces;
+    bool ifaceOn = false, ifaceHard = false, ifaceArmed = true; mutable bool ifaceBlocked = false; unsigned int ifaceMin = 4; double ifaceWeight = 0.01; float ifaceLimit = -1.0f;
+    std::vector<unsigned int> ifMates;          // mate indices that connect the assembly
+    std::vector<unsigned int> ifOcc; std::vector<int> ifPos;   // occupied lattice points of the asymmetric unit
+    void ensureInterfaceTable(PointSetModel * pModel);
+    // gap (A) between the asymmetric unit and its connecting mates, beyond bead contact; used as a gradient while the
+    // contact requirement is not met (otherwise the penalty is flat and a gap of several beads never closes)
+    double ifaceGap() const {
+        const unsigned int N = symCacheN; float best = 1e30f;
+        for (unsigned int s : ifMates){ const vector3 * M = &symCoords[(size_t)s*N];
+            for (unsigned int i : ifOcc){ const vector3 & a = symCoords[i];
+                for (unsigned int j : ifOcc){ const vector3 & b = M[j]; const float dx=a.x-b.x, dy=a.y-b.y, dz=a.z-b.z; const float d=dx*dx+dy*dy+dz*dz; if (d < best) best = d; } } }
+        return std::sqrt((double)best);
+    }
+
+    inline double ifacePenalty() const {
+        if (!ifaceOn || !ifaceArmed) return 0.0; const unsigned int c = interfaces.count(); if (c >= ifaceMin) return 0.0;
+        if (ifaceHard){ ifaceBlocked = true; return 1e30; }                      // refinement: once met, the requirement is a hard constraint
+        const double m = (double)(ifaceMin - c), g = std::max(0.0, ifaceGap() - ifaceLimit)/ifaceLimit;
+        return ifaceWeight*(m*m + g*g);
+    }
+
+    inline void ifAddOcc(unsigned int a){ if (ifPos[a] < 0){ ifPos[a] = (int)ifOcc.size(); ifOcc.push_back(a); } }
+    inline void ifRemoveOcc(unsigned int a){ const int p = ifPos[a]; if (p < 0) return; const unsigned int last = ifOcc.back(); ifOcc[p] = last; ifPos[last] = p; ifOcc.pop_back(); ifPos[a] = -1; }
+    inline void trkAdd(unsigned int a){ clashes.add(a); if (ifaceOn){ interfaces.add(a); ifAddOcc(a); } }
+    inline void trkRemove(unsigned int a){ clashes.remove(a); if (ifaceOn){ interfaces.remove(a); ifRemoveOcc(a); } }
+    template<class It> void trkReset(PointSetModel * pModel, It begin, unsigned int wl){ clashes.reset(begin, wl); ensureInterfaceTable(pModel);
+        if (ifaceOn){ interfaces.reset(begin, wl); ifOcc.clear(); ifPos.assign(symCacheN, -1); for (unsigned int b = 0; b < wl; b++) ifAddOcc(*(begin + b)); } }
+    float clashLimit = -1.0f;
+    void ensureSymmetryCache(PointSetModel * pModel);
+    void ensureClashTable(PointSetModel * pModel);
+    void addToPrSymAt(unsigned int index, const std::vector<unsigned int> & beadsInUse, unsigned int workingLimit, std::vector<unsigned int> & prBins, PofRData *pData);
+    void removeFromPrSymAt(unsigned int index, const std::vector<unsigned int> & beadsInUse, unsigned int workingLimit, std::vector<unsigned int> & prBins, PofRData *pData);
 
 public:
+    // fixed seed for reproducible runs (0 restores clock/random_device seeding)
+    void setRandomSeed(unsigned long seed){ rngSeed = seed; }
+    // symmetric models: minimum number of contacts (pair counts) between the asymmetric unit and its neighbouring mates
+    // (0 switches the requirement off) and the weight of the penalty for each missing contact (squared)
+    void setInterfaceRequirement(unsigned int minContacts = 4, double weight = 0.01){ ifaceMin = minContacts; ifaceWeight = weight; ifaceLimit = -1.0f; }
+    unsigned int interfaceContacts() const { return ifaceOn ? interfaces.count() : 0; }
+
     Anneal(float highT,
            float percent,
            unsigned int highTempRounds,
@@ -201,7 +277,8 @@ public:
 
     unsigned int getUseableNeighborFromSet(std::set<unsigned int> *beads_in_use,
                                                    PointSetModel *pModel,
-                                                   unsigned int & selectedIndex);
+                                                   unsigned int & selectedIndex,
+                                                   std::mt19937 & gen);
 
     unsigned int getUseableNeighborFromSetCE(std::set<unsigned int> *beads_in_use,
                                            PointSetModel *pModel,
@@ -210,11 +287,20 @@ public:
 
     unsigned int getUseableNeighborWeighted(std::set<unsigned int> *beads_in_use,
                                                     PointSetModel *pModel,
-                                                    unsigned int & selectedIndex);
+                                                    unsigned int & selectedIndex,
+                                                    std::mt19937 & gen
+                                                    );
 
     float getProbabilityOfSelectedIndex(std::set<unsigned int> *beads_in_use,
                                                        PointSetModel *pModel,
                                                        unsigned int & selectedIndex);
+
+    // same as the std::set versions above (same candidates, same order, same random draws), occupancy from the tracker
+    unsigned int getUseableNeighborFromSet(const ContactTracker & occupancy, PointSetModel *pModel, unsigned int selectedIndex, std::mt19937 & gen);
+    unsigned int getUseableNeighborWeighted(const ContactTracker & occupancy, PointSetModel *pModel, unsigned int selectedIndex, std::mt19937 & gen);
+    float getProbabilityOfSelectedIndex(const ContactTracker & occupancy, unsigned int selectedIndex){
+        return (float)occupancy.freeNeighbours(selectedIndex)/12.0f;
+    }
 
     unsigned int removeFromPrSym(
             unsigned int const &removeMeSubUnitIndex,
@@ -295,6 +381,9 @@ public:
      * prBin is the vector holding counts per bin
      * upperLimit is usually the working Limit of the set
      */
+    // direct mode (no stored bins): model and data used to bin distances on the fly; set by fillPrBinsAndAssignTotalBin
+    PointSetModel * dmModel = nullptr; PofRData * dmData = nullptr;
+    void directPr(const unsigned int bead, const unsigned int * ptr, const unsigned int upperLimit, std::vector<unsigned int> & prBins, int sign);
     inline void addToPr(const unsigned int addMe, const std::vector<unsigned int> & beadsInUse, const unsigned int upperLimit, const unsigned short int * const pBin, const unsigned int & totalBeadsInUniverse, std::vector<unsigned int> & prBins ){
 
         // beadsInUse must be sorted
@@ -305,6 +394,7 @@ public:
         unsigned int i=0;
         // add down column
         const unsigned int * const ptr = beadsInUse.data();
+        if (pBin == nullptr){ directPr(addMe, ptr, upperLimit, prBins, +1); return; }   // universe too large for stored bins
 
         while(ptr[i] < addMe && i < upperLimit){
             row = ptr[i];
@@ -414,17 +504,20 @@ public:
         std::copy(pBinCountBackUp->begin(), pBinCountBackUp->end(), *pBinCountBegin); //copy to bin count
     }
 
-
     /**
    *
-   * calculate Kulback Liebler divergence of contacts distribution
+   * Average Contacts per bin
    * @param distribution
    * @return
    */
     inline double calculateAvgContactsPotential(std::vector<unsigned int> &binCount, unsigned int wl) {
 
         double avgCon = 2.0*binCount[0]/(float)wl;
-        double diff = 10.0*exp(-avgCon/1.7);
+        //double diff = 10.0*exp(-avgCon/1.7);
+
+        double ratio = 5.345392309/avgCon;
+        double r6 = ratio*ratio*ratio*ratio*ratio*ratio;
+        double diff = r6*r6 - r6;
 
 //        if (avgCon < targetContacts){ // lower bound, can't be less than
 //            diff = (avgCon-targetContacts);
@@ -433,8 +526,17 @@ public:
 //            diff = 0;
 //        }
 
+        return diff + 0.25;
+    }
 
-        return diff;
+    double calculateAvgContactsPotential(double avgCon) {
+
+        // double ratio = 4.89994294978/avgCon;
+        // double r6 = ratio*ratio*ratio*ratio*ratio*ratio;
+        // double diff = r6*r6 - r6;
+        //
+        // return diff + 0.25;
+        return avgCon;
     }
 
 
@@ -446,7 +548,7 @@ public:
        */
     inline double calculateKLDivergenceContactsDistribution(std::vector<double> &distribution) {
 
-        double kl=0.0d, totalCounts = 0.0, avg = 0.0;
+        double kl=0.0, totalCounts = 0.0, avg = 0.0;
         for(unsigned int i=0; i< 13; i++){
             totalCounts += distribution[i];
             avg += i*distribution[i];
@@ -468,10 +570,10 @@ public:
         return diff;
     }
 
-    /**
- *
- */
-    inline void removeLatticePositionToModel(
+ /**
+  *
+  */
+     void removeLatticePositionToModel(
             std::vector<unsigned int> & bead_indices,
             std::vector<unsigned int> & pBinCount,
             unsigned short int * const pBin,
@@ -500,11 +602,12 @@ public:
         std::sort(pBeginIt, pBeginIt + *pWorkingLimit);
     }
 
-    /**
+    /*
+    *
     *
     *
     */
-    inline unsigned int removeLatticePositionToModelSym(
+    unsigned int removeLatticePositionToModelSym(
             std::vector<unsigned int> & bead_indices,
             std::vector<unsigned int> & modelPrBins,
             unsigned int * pWorkingLimit,
@@ -529,17 +632,32 @@ public:
         std::iter_swap(itIndex, pBeginIt + *pWorkingLimit);
         // still need to sort, swap changes the order
         // to save some time, sort should only be from swapped point to workingLimit
-        //std::sort(pBeginIt, pBeginIt + *pWorkingLimit);
+        // std::sort(pBeginIt, pBeginIt + *pWorkingLimit);
         return violations;
     }
 
     // coupon collector's problem
-    inline unsigned int getCoupons(unsigned int numberOfPoints){
+    unsigned int getCoupons(unsigned int numberOfPoints){
         auto couponbase = (double) numberOfPoints;
-        return (unsigned int)(couponbase*std::log(couponbase) + 0.5772156649*couponbase + 0.5d);
+        return (unsigned int)(couponbase*std::log(couponbase) + 0.5772156649*couponbase + 0.5);
     }
 
+    /**
+     * mean contact potential over the beads in use (full recount). The potential is contactCost() in AnnealTrackers.h;
+     * the annealing loops use ContactTracker::energy(), which returns the same value incrementally.
+     */
+    double calculateNumberOfPairwiseContacts(
+        unsigned int workingLimit,
+        PointSetModel *pModel,
+        std::set<unsigned int> &beads_in_use_tree,
+        std::vector<unsigned int> & bead_indices) {
 
+        double tempAverageContacts=0;
+        for (unsigned int i=0; i<workingLimit; i++){
+            tempAverageContacts += contactCost(numberOfContactsFromSet(&beads_in_use_tree, pModel, bead_indices[i]));
+        }
+        return tempAverageContacts/(double)workingLimit;
+    }
 
 };
 

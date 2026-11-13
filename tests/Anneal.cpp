@@ -76,7 +76,7 @@ TEST_F(AnnealerTest, getUseableNeighborFromSetTest){
     Anneal anneal(0.001, 0.44, 1234, text, 0.01, 0.01, 0.02, 0.03, 0.02, 45, 0.12, interconnectivityCutOff);
 
     for(unsigned int i=0; i<100; i++){
-        unsigned int index = anneal.getUseableNeighborFromSet(&beads, &basic, bead_indices[i]);
+        unsigned int index = anneal.getUseableNeighborFromSet(&beads, &basic, bead_indices[i], gen);
         ASSERT_NE(index, basic.getNeighborLimit());
     }
 
@@ -260,6 +260,6 @@ TEST_F(AnnealerTest, estimateMagnitudeOfDifferenceContactsPotential){
             &basic);
     
     std::cout << " delta " << delta << std::endl;
-    ASSERT_NEAR(delta, 0.0d, 0.00001);
+    ASSERT_NEAR(delta, 0.0, 0.00001);
     //ASSERT_GT(delta, 0);
 }

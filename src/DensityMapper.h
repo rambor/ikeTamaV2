@@ -40,10 +40,16 @@
 #include <sastools/PDBModel.h>
 #include <sastools/utils.h>
 #include <cstdlib>
+#include <cstdint>
+#include <cfloat>
+#include "DensityRefiner.h"
+
+class PofRData;
 
 // #include <boost/math/special_functions/spherical_harmonic.hpp
 
 class DensityMapper {
+    friend struct DensityMapperTestAccess;   // unit tests
 
     struct Trial{
         double value;
@@ -114,6 +120,20 @@ class DensityMapper {
 
     void createSphericalFibonacciLattice();
 
+    /*
+     * I(q) from shell sums. The sampling points lie on an HCP lattice, so their pair distances take a small number of
+     * values (shells). I(q) = sum_k S_k sinc(q r_k) with S_k = sum of rho_i*rho_j over the pairs in shell k (2x for i<j,
+     * shell 0 = the diagonal). Replaces the (K(K+1)/2 x Nq) Debye-factor table: O(K^2/2 + shells*Nq) per evaluation and
+     * a few MB of memory instead of a table of K^2/2*Nq floats (copied once per thread).
+     */
+    std::vector<uint32_t> pairShell;      // shell of pair (i<j), upper triangle row by row
+    std::vector<float> shellRadius;       // r_k
+    std::vector<float> shellSinc;         // sinc(q r_k), laid out [q][k]
+    unsigned int totalPairShells = 0, shellTableQ = 0;
+    unsigned long rngSeed = 0;
+    std::vector<int> keptIndexOfHCPPoint;  // HCP universe index -> position in keptHCPSamplingPoints (-1 if not kept)
+    std::string inputFilename;             // aligned set (EDGE RADIUS remark gives the bead lattice for refineModelDensity)
+
 public:
     /*
      * given a set of aligned structures,
@@ -163,13 +183,26 @@ public:
 
     void createHCPGrid();
 
-    void setDebyeFactors( std::vector<Datum> & workingSet);
+    void setDebyeFactors( std::vector<Datum> & workingSet);   // legacy (table of K^2/2 x Nq), not used by the refinements
+
+    // shell tables for the q values of workingSet (call after createHCPGrid)
+    void setShellTables(std::vector<Datum> & workingSet);
+    // I(q) of the densities at the kept sampling points; thread-safe, shellSums is caller-owned scratch
+    void calculateICalcFromDensities(const float * densities, float * iCalc, std::vector<double> & shellSums) const;
+    unsigned int getTotalPairShells() const { return totalPairShells; }
+
+    // reproducible runs: 0 (default) seeds from std::random_device as before
+    void setRandomSeed(unsigned long seed){ rngSeed = seed; }
+    unsigned int seedFor(unsigned int stream){
+        if (rngSeed != 0) return (unsigned int)(rngSeed + 7919u*stream);
+        std::random_device rd; return rd();
+    }
 
     void populateICalcOpenMP(unsigned int total_q, unsigned int totalHCPInUse, std::vector<float> & iCalc, float * squared_amplitudes, float * db);
     void populateICalc(unsigned int total, std::vector<float> & pICalc, float * squared_amplitudes);
 
     float populateDensities(std::vector<float> &amplitudesT, std::vector<float> &densities);
-    void populateDensitiesOMP(unsigned int totalHCPInUse, std::vector<Neighbors> neighbors, std::vector<float> & amplitudesT, std::vector<float> & densities_at_HCP);
+    void populateDensitiesOMP(unsigned int totalHCPInUse, std::vector<Neighbors> & neighbors, std::vector<float> & amplitudesT, std::vector<float> & densities_at_HCP);
 
     float calculateScaleFactor(unsigned int total, float *const pICalc, float *const pSigma, Datum *const pWorkingSet);
 
@@ -238,6 +271,24 @@ public:
 
 
     std::vector<LatticePoint> & getLatticePoints(){ return lattice_points;}
+
+    /*
+     * Density refinement against I(q) (and P(r)) starting from the occupancy of the aligned set; replaces the
+     * cross-entropy search (refineModel / refineModelOPENMP) with Metropolis annealing of a continuous density on the
+     * bead lattice (see DensityRefiner.h). A ladder of prior weights (options.lambdas) is run in parallel and the
+     * largest weight whose chi2(free) is within noise of the best is kept.
+     *
+     *   workingSet   I(q) to fit (q, I, sigma); rebinned to ~150 points, alternate points held out as the free set
+     *   pofrData     optional (nullptr): P(r) restraint, KL(P(r)_data || P(r)_model) on the Shannon bins
+     *   options      massKDa is required; spacing <= 0 takes 2 x EDGE RADIUS of the aligned set
+     *   prefix       writes <prefix>_map.xplor, _start_map.xplor, _density.pdb, _beads.pdb, _fit.dat
+     *
+     * Coordinates are in the centred frame of the aligned set (as CenteredInputModel).
+     */
+    densrefine::LambdaResult refineModelDensity(std::vector<Datum> & workingSet, PofRData * pofrData,
+                                                densrefine::Options options, const std::string & prefix = "refined_density");
+
+    static float readEdgeRadius(const std::string & pdbfile);
 
 };
 

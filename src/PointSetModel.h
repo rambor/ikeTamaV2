@@ -100,6 +100,7 @@ public:
 
     unsigned int getSymmetryIndex(){ return symmetryIndex;}
     std::string getSymmetryGroup(){ return symmetryGroup;}
+    const std::vector<unsigned int> & getNeighboringSubunits() const { return neighboringSubunits; }
     float * getSubUnitAnglesCos(){ return subUnitAnglesCos.data();}
     float * getSubUnitAnglesSin(){ return subUnitAnglesSin.data();}
     vector3 transformVectorBySymmetry(unsigned int subunitIndex, const vector3 & vec);
@@ -127,7 +128,8 @@ public:
     bool isUseDirectMethod() const { return useDirectMethod; }
 
     unsigned short int populateBins(PofRData * pData);
-    unsigned short int * getPointerToBins(){ return &bins[0];}
+    // nullptr when the universe is too large to precompute bins (slow/direct mode): callers then bin on the fly
+    unsigned short int * getPointerToBins(){ return bins.empty() ? nullptr : bins.data();}
 
     /*
      * this is sorted!

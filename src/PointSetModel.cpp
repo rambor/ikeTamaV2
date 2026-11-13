@@ -26,11 +26,11 @@
  * @param searchSpace
  * @param beadradius
  */
-PointSetModel::PointSetModel(float searchSpace, float beadradius) : radius_of_universe(searchSpace*0.5f), bead_radius(beadradius), cutOffNeighbor(2.001f*bead_radius) {
+PointSetModel::PointSetModel(float searchSpace, float beadradius) : radius_of_universe(searchSpace*0.6124f), bead_radius(beadradius), cutOffNeighbor(2.001f*bead_radius) {
 
 //    radial_limit = std::ceil((radius_of_universe + radius_of_universe*0.1011f)/bead_radius)*bead_radius;
-    radial_limit = std::ceil((radius_of_universe)/bead_radius)*bead_radius;
-
+    radial_limit = std::ceil((radius_of_universe)/bead_radius)*bead_radius + 2.0f*bead_radius;
+    //radial_limit = std::ceil((0.6124f*searchSpace)/bead_radius)*bead_radius + 2.0f*bead_radius; // + one shell for hydration
 
     inv_bead_radius = 1.0f/bead_radius;
     bead_volume = (float)(4.0f/3.0f*bead_radius*bead_radius*bead_radius*M_PI); // 4/3*PI*r^3
@@ -119,7 +119,7 @@ PointSetModel::PointSetModel(float beadradius, float xmin, float ymin, float zmi
  * refining is to take an existing model do an additional low-temp (low acceptance rate) search
  * so we are looking for small adjustments around the input model
  */
-PointSetModel::PointSetModel(std::string maskfile, float searchSpace, float beadradius, std::string sym, bool maskit) : radius_of_universe(searchSpace*0.5f), bead_radius(beadradius), cutOffNeighbor(2.001f*bead_radius) {
+PointSetModel::PointSetModel(std::string maskfile, float searchSpace, float beadradius, std::string sym, bool maskit) : radius_of_universe(searchSpace*0.6124f), bead_radius(beadradius), cutOffNeighbor(2.001f*bead_radius) {
 
     radial_limit = std::ceil((radius_of_universe + radius_of_universe*0.1011f)/bead_radius)*bead_radius;
 
@@ -170,7 +170,7 @@ PointSetModel::PointSetModel(float beadradius, float height, float radius, std::
 /*
  *
  */
-PointSetModel::PointSetModel(float searchSpace, float beadradius, std::string sym) : radius_of_universe(searchSpace*0.5f), bead_radius(beadradius), cutOffNeighbor(2.001f*bead_radius) {
+PointSetModel::PointSetModel(float searchSpace, float beadradius, std::string sym) : radius_of_universe(searchSpace*0.6124f), bead_radius(beadradius), cutOffNeighbor(2.001f*bead_radius) {
 
     radial_limit = std::ceil((radius_of_universe + radius_of_universe*0.07f)/bead_radius)*bead_radius;
     inv_bead_radius = 1.0f/bead_radius;
@@ -288,7 +288,7 @@ PointSetModel::PointSetModel(std::string helicalfile, float beadradius){
 }
 
 PointSetModel::PointSetModel(std::vector<vector3> & centered_coordinates, float searchSpace, float beadradius) :
-radius_of_universe(searchSpace*0.5f),
+radius_of_universe(searchSpace*0.6124f),
 bead_radius(beadradius),
 cutOffNeighbor(2.001f*bead_radius) {
 
@@ -307,7 +307,7 @@ cutOffNeighbor(2.001f*bead_radius) {
 
 }
 
-PointSetModel::PointSetModel(std::string maskfile, float searchSpace, float beadradius) : radius_of_universe(searchSpace*0.5f), bead_radius(beadradius), cutOffNeighbor(2.001f*bead_radius) {
+PointSetModel::PointSetModel(std::string maskfile, float searchSpace, float beadradius) : radius_of_universe(searchSpace*0.6124f), bead_radius(beadradius), cutOffNeighbor(2.001f*bead_radius) {
 
     radial_limit = std::ceil(radius_of_universe/bead_radius)*bead_radius;
 //    radial_limit = std::ceil((radius_of_universe + radius_of_universe*0.1011f)/bead_radius)*bead_radius;
@@ -393,7 +393,7 @@ void PointSetModel::createSubUnitAngles(){
     subUnitAnglesSin[0]=0.0f;
 
     for(unsigned int i=1; i<numberOfSubUnits; i++){
-        double angle = M_PI*2.0d*i/(double)symmetryIndex;
+        double angle = M_PI*2.0*i/(double)symmetryIndex;
         subUnitAnglesCos[i]=(float)std::cos(angle);
         subUnitAnglesSin[i]=(float)std::sin(angle);
     }
@@ -408,6 +408,10 @@ void PointSetModel::createUniverse(bool useSphericalModel) {
         const auto z_prime_index = (int) (2*std::ceil(radial_limit*inv_bead_radius*0.5))+3;
         const auto x_prime_index = (int) (2*std::ceil(radial_limit*inv_bead_radius*0.5))+3;
         const auto y_prime_index = (int) (2*std::ceil(radial_limit*inv_bead_radius*0.5))+3;
+
+        // const vector3 a1 = vector3(bead_radius, -sqrtf(3.0f)*bead_radius, 0);
+        // const vector3 a2 = vector3(bead_radius,  sqrtf(3.0f)*bead_radius, 0);
+        // const vector3 a3 = vector3(0, 0, (float)(4.0f*sqrt(6)/3.0f*bead_radius)); // seems fine, spreads out
 
         const vector3 a1 = vector3(2*bead_radius, 0, 0);
         const vector3 a2 = vector3(-bead_radius, bead_radius*sqrt(3.0f), 0);
@@ -879,6 +883,17 @@ std::vector<unsigned int>::iterator PointSetModel::getPointerToNeighborhood(unsi
 unsigned short int PointSetModel::populateBins(PofRData * pData) {
 
     logger("CALCULATING", "POPULATING BINS");
+    if (useDirectMethod || bins.size() < totalDistances){
+        // slow/direct mode: the n(n-1)/2 bins are not stored (too many); bins are computed on the fly by the caller.
+        // The largest bin comes from the diameter of the bounding sphere of the universe.
+        vector3 c(0,0,0); for (unsigned int n=0; n < number_of_beads; n++) c += beads[n].getVec();
+        c = c*(1.0f/(float)std::max(1u, number_of_beads)); float r2 = 0;
+        for (unsigned int n=0; n < number_of_beads; n++){ const float d = (beads[n].getVec() - c).length(); if (d > r2) r2 = d; }
+        const unsigned short int maxbin = pData->convertToBin(2.0f*r2);
+        logger("DIRECT MODE", "BINS COMPUTED ON THE FLY");
+        logger("MAX BIN", std::to_string(maxbin));
+        return maxbin;
+    }
     //unsigned short int * pBin = &bins[0];
     const Bead * pBead = beads.data();
     unsigned short int * pBin = bins.data();
@@ -934,6 +949,7 @@ unsigned short int PointSetModel::populateBins(PofRData * pData) {
 //        std::cout << " " << rvalue << " " << value << " " << calc  << std::endl;
 //    }
 //    std::cout << " CONTACTS " << contacts << std::endl;
+
     logger("MAX BIN", std::to_string(maxbin));
     return maxbin;
 }
@@ -943,8 +959,8 @@ void PointSetModel::pruneUniverseToAsymmetricUnit(){
      * set angular range for
      */
     //const vector3 normX = vector3(1,0,0);
-    double angle = M_PI*2.0d/(double)symmetryIndex;
-    double cosLimit = std::cos(angle*0.5d);
+    double angle = M_PI*2.0/(double)symmetryIndex;
+    double cosLimit = std::cos(angle*0.5);
 
     logger("ROT ANGLE", SASTOOLS_UTILS_H::formatNumber(angle*180/M_PI,2)); // half angle centered on X-axis
     logger("COSINE LIMIT", SASTOOLS_UTILS_H::formatNumber(cosLimit, 3));
@@ -1190,7 +1206,7 @@ unsigned short int PointSetModel::getMaxBin(PofRData * pData) {
 /**
  * write subset of selected bead to file
  */
-void PointSetModel::writeSubModelToFile(unsigned int startIndex, unsigned int workingLimit, std::vector<unsigned int> &selectedBeads, std::string nameOf){
+void PointSetModel::writeSubModelToFile(unsigned int startIndex, unsigned int wl, std::vector<unsigned int> &selectedBeads, std::string nameOf){
 
     nameOf = nameOf + ".pdb";
     //const char * outputFileName = nameOf.c_str();
@@ -1230,7 +1246,7 @@ void PointSetModel::writeSubModelToFile(unsigned int startIndex, unsigned int wo
     //  fprintf(pFile, "REMARK TEMP RANGE %.3f => %.4E\nREMARK TOTAL TEMPERATURE STEPS %i\nREMARK TOTAL BEADS %i\n", "ATOM", i+1, "CA", "ALA", "A", residue_index.c_str(), currentBead->getX(), currentBead->getY(), currentBead->getZ() );
     unsigned int residueCnt = 1;
 
-    for (unsigned int i=startIndex; i<workingLimit; i++){
+    for (unsigned int i=startIndex; i<wl; i++){
         Bead * currentBead = this->getBead(selectedBeads[i]);
         residue_index = residueCnt;
 
@@ -2232,7 +2248,8 @@ void PointSetModel::createSeedFromPDBSym(std::string filename, PofRData * pData,
 
 
 
-/**
+/*
+ *
  * returns sorted indices of lattice positions that match input PDB model
  */
 void PointSetModel::createSeedFromPDB(std::string filename, PofRData * pData, unsigned int totalBins, std::vector<double> * pdbPr){
@@ -2244,7 +2261,7 @@ void PointSetModel::createSeedFromPDB(std::string filename, PofRData * pData, un
     float diffx, diffy, diffz, bx, by, bz;
     const unsigned int totalAtoms = pdbModel.getTotalCoordinates();
 
-    const float beadradius = (this->getBeadRadius()*std::sqrt(3.0f/2.0f));
+    const float beadradius = this->getBeadRadius()*1.03;// (this->getBeadRadius()*std::sqrt(3.0f/2.0f));
 
     std::vector<unsigned int> indicesToCheck(totalAtoms);
 
@@ -2257,7 +2274,7 @@ void PointSetModel::createSeedFromPDB(std::string filename, PofRData * pData, un
      * calculate surface accessible volume of the PDB model
      */
     std::vector<float> weights(totalAtoms);
-    const float delta_r = 1.4f;
+    const float delta_r = 1.4f; // radius of water
     std::vector<Eigen::Vector3f> coordinates(totalAtoms);
     for (unsigned int i=0; i < totalAtoms; i++){
         bx = *(pdbModel.getCenteredXVec() + ptr[i]);
@@ -2295,7 +2312,7 @@ void PointSetModel::createSeedFromPDB(std::string filename, PofRData * pData, un
         by = currentBead->getY();
         bz = currentBead->getZ();
 
-        float tempclosest, closest=1.1f*beadradius;
+        float tempclosest, closest=beadradius;
         bool foundIt=false;
         unsigned int found=0;
         for (unsigned int t=0; t < totalAtoms; t++){
@@ -2342,7 +2359,7 @@ void PointSetModel::createSeedFromPDB(std::string filename, PofRData * pData, un
     logger("TOTAL UNIQUE INDICES", formatNumber((unsigned int)seed_indices.size()));
     logger("TOTAL IN UNIVERSE", formatNumber(totalBeads));
 
-    // make PDB P(r) for refining beadmodel
+    // make PDB P(r) for refining beadmodel (true distribution)
     double sum=0.0;
     for (unsigned int i=0; i<totalAtoms; i++){
 
@@ -2357,18 +2374,20 @@ void PointSetModel::createSeedFromPDB(std::string filename, PofRData * pData, un
             diffz = bz - *(pdbModel.getCenteredZVec()+j);
             float dis = sqrt((diffx*diffx + diffy*diffy + diffz*diffz));
             // convert to bin
-            (*pdbPr)[pData->convertToBin(dis)]++;
+            (*pdbPr)[pData->convertToBin(dis)] += 1.0;
             sum += 1.0;
         }
     }
 
     //normalize
-    double invSum = 1.0d/sum;
+    double invSum = 1.0/sum;
+
     for (unsigned int i=0; i<totalBins; i++){
-        //std::cout << i << " " << (*pdbPr)[i] << std::endl;
         (*pdbPr)[i] *= invSum;
+        std::cout << i << " " << (i + 0.5)*pData->getBinWidth() << " " << (*pdbPr)[i] << std::endl;
     }
 
+std::cout << " -- " << std::endl;
     // plot should integrate to 1
     // prune beads that are single
     EulerTour eulerTour(seed_indices.begin(), seed_indices.size(), this);
@@ -2384,6 +2403,32 @@ void PointSetModel::createSeedFromPDB(std::string filename, PofRData * pData, un
     pdbModel.writeCenteredCoordinatesToFile("centeredPDBSeed");
 
     this->writeSubModelToFile(0, total_in_seed, seed_indices, "centeredLatticeSeed");
+
+    std::vector<float> tvec (pdbPr->size());
+
+    sum = 0;
+    for (unsigned int i=0; i<total_in_seed; i++){
+        Bead * currentBead = this->getBead(seed_indices[i]);
+
+        for (unsigned int j=(i+1); j<total_in_seed; j++){
+            Bead * jBead = this->getBead(seed_indices[j]);
+            tvec[pData->convertToBin ((currentBead->getVec()-jBead->getVec()).length())] += 1.0;
+            sum+=1;
+        }
+    }
+
+    //normalize
+    invSum = 1.0/sum;
+
+    sum = 0;
+    for (unsigned int i=0; i<totalBins; i++){
+        tvec[i] *= invSum;
+        double vl = (*pdbPr)[i] - tvec[i];
+        sum += vl*vl;
+        std::cout << i << " " << (i + 0.5)*pData->getBinWidth() << " " << tvec[i] << std::endl;
+    }
+    std::cout << "squared sum " << sum/(float)totalBins << std::endl;
+
 }
 
 std::string PointSetModel::writeModelToFileBare(float dkl, unsigned int workingNumber, std::vector<unsigned int> &selectedBeads, std::vector<unsigned int> &pofrModel, std::string nameOf, Anneal *annealedObject, unsigned int steps, float volume, float averageContacts){

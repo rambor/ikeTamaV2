@@ -140,6 +140,8 @@ void LatticePoint::calculateProbabilitiesFromOccurrences(){
         sum += point;
     }
 
+    if (sum == 0) return;   // nothing counted (e.g. after refineModelASA): keep the probabilities instead of 0/0
+
     auto invTotal = 1.0f/(float)sum;
 
     unsigned int index_of_occurrence = 0;

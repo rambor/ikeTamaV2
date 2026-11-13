@@ -174,7 +174,7 @@ bool Anneal::createSeedFromPDB(PointSetModel *pModel, PofRData *pData, std::stri
     //output for plotting
     bool isUpdated = false;
 
-    auto coupons = (unsigned int)(workingLimit*std::log((double)workingLimit) + 0.5772156649*workingLimit + 0.5d);
+    auto coupons = (unsigned int)(workingLimit*std::log((double)workingLimit) + 0.5772156649*workingLimit + 0.5);
     unsigned int updateCount = ccmultiple*coupons;
     float seedHighTempRounds = updateCount/0.65f;///0.1;
     unsigned int updatedCount = 0;
@@ -210,12 +210,12 @@ bool Anneal::createSeedFromPDB(PointSetModel *pModel, PofRData *pData, std::stri
             std::cout << "*******************                  ADD                   *******************" << std::endl;
             std::sprintf(addRemoveText, " ");
 
-            original = getUseableNeighborFromSet(&beads_in_use_tree, pModel, bead_indices[randomIndex(gen)]);
+            original = getUseableNeighborFromSet(&beads_in_use_tree, pModel, bead_indices[randomIndex(gen)], gen);
             auto itIndex = std::find(bead_indices.begin(), bead_indices.end(), original);
             auto distance = (unsigned int) std::distance(bead_indices.begin(), itIndex);
 
             while(original == noNeigborIndex || distance >= deadLimit){
-                original = getUseableNeighborFromSet(&beads_in_use_tree, pModel, bead_indices[randomIndex(gen)]);
+                original = getUseableNeighborFromSet(&beads_in_use_tree, pModel, bead_indices[randomIndex(gen)], gen);
                 itIndex = std::find(bead_indices.begin(), bead_indices.end(), original);
                 distance = (unsigned int)std::distance(bead_indices.begin(), itIndex);
             }
@@ -370,11 +370,14 @@ bool Anneal::createSeedFromPDB(PointSetModel *pModel, PofRData *pData, std::stri
     float average_number_of_contacts = contactSum/(float)workingLimit;
 
     logger("KL DIVERGENCE", "");
-    logger("INITIAL D_KL", formatNumber(startKL,7));
-    logger("LOWEST D_KL", formatNumber(lowestKL,7));
+    logger("INITIAL D_KL", formatNumber(startKL,9));
+    logger("LOWEST D_KL", formatNumber(lowestKL,9));
+    printf("Start D_KL : %.4E \n", startKL);
+    printf("Final D_KL : %.4E \n", currentKL);
     logger("", "AVERAGE CONTACTS");
     logger("INITIAL", formatNumber(startContactSum,2));
-    logger("FINAL (bin[one])", formatNumber(((2.0*binCount[0])/(double)workingLimit),2));
+    logger("FINAL", formatNumber(average_number_of_contacts, 2));
+    //logger("FINAL (bin[one])", formatNumber(((2.0*binCount[0])/(double)workingLimit),2));
     // this is fixed model for initial high temp search?
     // set this as the seed
     //    pModel->setBeadAverageAndStdev(average_x, stdev);
@@ -565,7 +568,7 @@ std::string Anneal::refineHomogenousBodyASACVXSeeded(PointSetModel *pModel, PofR
     float tempAverageContacts;
 
     // coupon collector's problem
-    auto coupons = (unsigned int)(workingLimit*std::log((double)workingLimit) + 0.5772156649*workingLimit + 0.5d);
+    auto coupons = (unsigned int)(workingLimit*std::log((double)workingLimit) + 0.5772156649*workingLimit + 0.5);
     unsigned int updateCount = ccmultiple*coupons;
 
     float step_limit = (updateCount < 10000) ? 27000 : updateCount;
@@ -702,7 +705,7 @@ std::string Anneal::refineHomogenousBodyASACVXSeeded(PointSetModel *pModel, PofR
                  */
                 unsigned int testIndex = selections[0];
                 for(auto & sel : selections){
-                    testIndex = getUseableNeighborWeighted(&beads_in_use_tree, pModel, sel);
+                    testIndex = getUseableNeighborWeighted(&beads_in_use_tree, pModel, sel, gen);
                     if (testIndex != pModel->getNeighborLimit()){
                         break;
                     }
@@ -884,7 +887,7 @@ std::string Anneal::refineHomogenousBodyASACVXSeeded(PointSetModel *pModel, PofR
 //                            break;
 //                        }
 //                    }
-                    neighbor = getUseableNeighborWeighted(&beads_in_use_tree, pModel, newPosition);
+                    neighbor = getUseableNeighborWeighted(&beads_in_use_tree, pModel, newPosition, gen);
                     if (neighbor != neighborLimit && neighbor != swap1 && (seed_model.find(neighbor) == seed_model.end())){
                         break;
                     }

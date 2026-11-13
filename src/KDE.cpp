@@ -438,7 +438,7 @@ float KDE::surfaceVolumeCalculation(unsigned int workingLimit, std::vector<unsig
 
 /**
  * maps are not centered for models with symmetry
- * First model in the kde.list is the reference to which symmtry operators will be applied
+ * First model in the kde.list is the reference to which symmetry operators will be applied
  *
  * @param pModel
  * @param cutoff
