@@ -18,214 +18,133 @@
 #ifndef IKETAMA_SUBUNIT_H
 #define IKETAMA_SUBUNIT_H
 
+/*
+ * SubUnit: a set of lattice beads (indices into the universe) with a rigid-body transform
+ *
+ *     transformed = R (x - pivot) + translateTo
+ *
+ * R is a 3x3 rotation (x1..z3, column-major as in the original code: new.x = x1*b.x + y1*b.y + z1*b.z).
+ *
+ * Changes from the 2020 version
+ *  - copy/assignment are the compiler defaults: every member is copied, including the undo state (the hand-written
+ *    versions left the backups empty, so undo after a copy restored zeros)
+ *  - removeIndex, swapIndices, getIndexOfBeadtoRemove and getPointerToTransformedCoordinate throw std::logic_error
+ *    when the index is not in the working set (they used to read/write past workingLimit)
+ *  - capacity grows from 0 (an empty SubUnit could not take its first bead)
+ *  - the constructor checks that indices has at least workingLimit entries
+ *  - the random start uses the caller's generator (reproducible with --randomSeed) and is uniform over rotations
+ *    (random unit quaternion; the old Euler draw in whole degrees over-sampled beta near +-90 deg)
+ *  - rotateAt composes a small rotation with the current one (R <- dR R) instead of adding to Euler angles, which
+ *    stalled near gimbal lock; inPlace = true keeps the subunit where it is when the pivot changes
+ *  - backup/undo copy only the working set
+ *  - translateToPosition(vector3) moves the pivot to an arbitrary point, e.g. a transformed bead of a neighbouring
+ *    subunit (translateToTransformedPosition(index) uses the untransformed universe position of a bead, as before)
+ *  - the declared-but-undefined constructor taking a translation vector is removed
+ */
+
 #include <vector>
 #include <string>
 #include <iostream>
 #include <algorithm>
+#include <random>
+#include <stdexcept>
+#include <climits>
+#include <cmath>
 #include "sastools/vector3.h"
 #include "sastools/Bead.h"
 #include "PointSetModel.h"
-#include <random>
 
 class PointSetModel;
 
 class SubUnit {
 
-    std::vector<vector3> backedUpCoordinates;
-    std::vector<vector3> backedUpTransformedCoordinates;
-    std::vector<vector3> coordinates;
+    std::vector<vector3> coordinates;                    // untransformed (universe) positions of the beads in use
     std::vector<vector3> transformedCoordinates;
+    std::vector<vector3> backedUpTransformedCoordinates;
 
-    // removing a coordinate means swapping to the end and decrementing totalIndices
-    // add means adding to totalIndices and incrementing
-
+    // removing a coordinate swaps it to the end and decrements workingLimit; adding appends and increments
     std::vector<unsigned int> indicesInUse;
-    std::vector<unsigned int> backedUpindicesInUse;
 
-    unsigned int swapLocale;
+    unsigned int swapLocale = 0;
 
-    unsigned int pivotIndex, subUnitIndex, translateTo;
-    unsigned int backedUpPivotIndex, backedUpTranslateToIndex;
-    unsigned int capacity;
+    unsigned int pivotIndex = 0, subUnitIndex = 0, translateTo = 0;
+    unsigned int backedUpPivotIndex = 0, backedUpTranslateToIndex = 0;
+    unsigned int capacity = 0;
+    unsigned int workingLimit = 0;
 
-    Bead * pPivotPoint, * pBackUpPivotPoint;
+    const Bead * pPivotPoint = nullptr, * pBackUpPivotPoint = nullptr;
 
     vector3 pivotVector, translateToVector, backedUpCenteringVector, backedUpTranslationVector;
 
-    unsigned int workingLimit;
-    float alpha_x, beta_y, gamma_z;
-    float alpha_x_old, beta_y_old, gamma_z_old;
-    float x1, x2, x3, y1, y2, y3, z1, z2, z3;
-    float x1_old, x2_old, x3_old, y1_old, y2_old, y3_old, z1_old, z2_old, z3_old;
+    float x1 = 1, x2 = 0, x3 = 0, y1 = 0, y2 = 1, y3 = 0, z1 = 0, z2 = 0, z3 = 1;
+    float x1_old = 1, x2_old = 0, x3_old = 0, y1_old = 0, y2_old = 1, y3_old = 0, z1_old = 0, z2_old = 0, z3_old = 1;
 
-    float convert = (float)(M_PI/180.0f);
+    static constexpr float convert = (float)(M_PI/180.0);
 
     void makeBackUp();
-
-    void rotate(float alpha, float beta, float gamma);
-
-    void transformPoint(const vector3 *originalVec, vector3 *newVewc);
+    void transformAll();                                  // recompute transformedCoordinates[0, workingLimit)
+    void transformPoint(const vector3 *originalVec, vector3 *newVec) const;
+    void setRotationMatrix(const float m[9]);             // row-major m -> x1..z3
+    void getRotationMatrix(float m[9]) const;
+    void ensureCapacity(unsigned int needed);
+    unsigned int locate(unsigned int beadIndex, const char * caller) const;   // position in indicesInUse or throw
 
 public:
-    SubUnit();
+    SubUnit() = default;
 
     SubUnit(unsigned int cofmIndex, unsigned int subUnitIndex, unsigned int translateTo);
 
-    SubUnit(unsigned int subUnitIndex, unsigned int cofmIndex, unsigned translateTo, unsigned int workingLimit, std::vector<unsigned int> &indices, PointSetModel *pModel);
-
-    SubUnit(unsigned int subUnitIndex, unsigned int cofmIndex, unsigned translateTo, vector3 * translationVec, unsigned int workingLimit, std::vector<unsigned int> &indices, PointSetModel *pModel);
-
     /**
-     * Copy Constructor
-     * @param p2
+     * @param indices    bead indices (at least workingLimit of them; the first workingLimit are used)
+     * @param rng        generator for the random starting orientation (the run's generator, for reproducibility)
      */
-    SubUnit(const SubUnit &p2) : pivotIndex(p2.pivotIndex), subUnitIndex(p2.subUnitIndex) {
+    SubUnit(unsigned int subUnitIndex, unsigned int cofmIndex, unsigned int translateTo, unsigned int workingLimit,
+            std::vector<unsigned int> &indices, PointSetModel *pModel, std::mt19937 &rng);
 
-        this->alpha_x = p2.alpha_x;
-        this->beta_y = p2.beta_y;
-        this->gamma_z = p2.gamma_z;
-
-        this->capacity = p2.capacity;
-        this->workingLimit = p2.workingLimit;
-
-        this->x1 = p2.x1;
-        this->x2 = p2.x2;
-        this->x3 = p2.x3;
-        this->y1 = p2.y1;
-        this->y2 = p2.y2;
-        this->y3 = p2.y3;
-        this->z1 = p2.z1;
-        this->z2 = p2.z2;
-        this->z3 = p2.z3;
-
-        this->pivotVector = vector3(p2.pivotVector.x, p2.pivotVector.y, p2.pivotVector.z);
-        this->translateToVector = vector3(p2.translateToVector.x, p2.translateToVector.y, p2.translateToVector.z);
-
-        this->pivotIndex = p2.pivotIndex;
-        this->translateTo = p2.translateTo;
-
-        this->pPivotPoint = *(&p2.pPivotPoint);
-        this->pBackUpPivotPoint = *(&p2.pBackUpPivotPoint);
-
-        this->coordinates.resize(this->capacity);
-        this->transformedCoordinates.resize(this->capacity);
-        this->indicesInUse.resize(this->capacity);
-        this->backedUpCoordinates.resize(this->capacity);
-        this->backedUpindicesInUse.resize(this->capacity);
-        this->backedUpTransformedCoordinates.resize(this->capacity);
-
-        std::copy(p2.coordinates.begin(),
-                  p2.coordinates.begin() + this->workingLimit,
-                  this->coordinates.begin());
-
-        std::copy(p2.transformedCoordinates.begin(),
-                  p2.transformedCoordinates.begin() + this->workingLimit,
-                  this->transformedCoordinates.begin());
-
-        std::copy(p2.indicesInUse.begin(),
-                  p2.indicesInUse.begin() + this->workingLimit,
-                  this->indicesInUse.begin());
-    }
-
-
-    // copy assignment
-    SubUnit& operator=(const SubUnit& p2) {
-
-        if (this == &p2)
-            return *this;
-
-        this->alpha_x = p2.alpha_x;
-        this->beta_y = p2.beta_y;
-        this->gamma_z = p2.gamma_z;
-
-        this->capacity = p2.capacity;
-        this->workingLimit = p2.workingLimit;
-
-        this->x1 = p2.x1;
-        this->x2 = p2.x2;
-        this->x3 = p2.x3;
-        this->y1 = p2.y1;
-        this->y2 = p2.y2;
-        this->y3 = p2.y3;
-        this->z1 = p2.z1;
-        this->z2 = p2.z2;
-        this->z3 = p2.z3;
-
-        this->pivotVector = vector3(p2.pivotVector.x, p2.pivotVector.y, p2.pivotVector.z);
-        this->translateToVector = vector3(p2.translateToVector.x, p2.translateToVector.y, p2.translateToVector.z);
-
-        this->pivotIndex = p2.pivotIndex;
-        this->translateTo = p2.translateTo;
-
-        this->pPivotPoint = *(&p2.pPivotPoint);
-        this->pBackUpPivotPoint = *(&p2.pBackUpPivotPoint);
-
-        this->coordinates.resize(this->capacity);
-        this->transformedCoordinates.resize(this->capacity);
-        this->indicesInUse.resize(this->capacity);
-        this->backedUpCoordinates.resize(this->capacity);
-        this->backedUpindicesInUse.resize(this->capacity);
-        this->backedUpTransformedCoordinates.resize(this->capacity);
-
-        std::copy(p2.coordinates.begin(),
-                  p2.coordinates.begin() + this->workingLimit,
-                  this->coordinates.begin());
-
-        std::copy(p2.transformedCoordinates.begin(),
-                  p2.transformedCoordinates.begin() + this->workingLimit,
-                  this->transformedCoordinates.begin());
-
-        std::copy(p2.indicesInUse.begin(),
-                  p2.indicesInUse.begin() + this->workingLimit,
-                  this->indicesInUse.begin());
-
-        return *this;
-    }
-
-
+    SubUnit(const SubUnit &) = default;
+    SubUnit & operator=(const SubUnit &) = default;
+    SubUnit(SubUnit &&) noexcept = default;
+    SubUnit & operator=(SubUnit &&) noexcept = default;
     ~SubUnit() = default;
 
-
     void addIndex(unsigned int indexToAdd, PointSetModel *pModel);
-
     void undoAdd();
 
     void removeIndex(unsigned int indexToRemove);
-
     void undoRemove();
 
-    vector3 translateAndRotatePoint(const vector3 * const originalVec);
+    vector3 translateAndRotatePoint(const vector3 * originalVec) const;
 
-    const vector3 *getPointerToTransformedCoordinates() const { return &transformedCoordinates.front(); }
+    const vector3 *getPointerToTransformedCoordinates() const { return transformedCoordinates.data(); }
+    const vector3 & getStartToTransformedCoordinates() const { return transformedCoordinates.front(); }
 
-    unsigned int getIndexOfBeadtoRemove(unsigned int indexToRemove);
-    unsigned int getTranslateToIndex(){ return translateTo;}
-    unsigned int getSubUnitIndex() { return subUnitIndex; }
+    unsigned int getIndexOfBeadtoRemove(unsigned int indexToRemove) const { return locate(indexToRemove, "getIndexOfBeadtoRemove"); }
+    unsigned int getTranslateToIndex() const { return translateTo; }
+    unsigned int getSubUnitIndex() const { return subUnitIndex; }
+    unsigned int getWorkingLimit() const { return workingLimit; }
+    unsigned int getPivotIndex() const { return pivotIndex; }
+    const vector3 & getTranslateToVector() const { return translateToVector; }
 
+    // pivot goes to the universe position of bead translatedTo (untransformed), as before
     void translateToTransformedPosition(unsigned int translatedTo, PointSetModel * pModel);
-
+    // pivot goes to an arbitrary point (e.g. a transformed bead of a neighbouring subunit); translateTo index = UINT_MAX
+    void translateToPosition(const vector3 & position);
     void undoTranslateTo(PointSetModel *pModel);
 
-    void rotateAt(unsigned int newPivotPoint, float angleInDegreesX, float angleInDegreesY, float angleInDegreesZ, PointSetModel * pModel);
-
+    /**
+     * Rotate by small angles (degrees, about the lab x, y, z axes: dR = Rz Ry Rx) about bead newPivotPoint.
+     * inPlace = false: the new pivot is placed at translateToVector (old behaviour: a pivot change also moves the subunit)
+     * inPlace = true : the new pivot stays where it currently is, so the move is a pure rotation about that bead
+     */
+    void rotateAt(unsigned int newPivotPoint, float angleInDegreesX, float angleInDegreesY, float angleInDegreesZ,
+                  PointSetModel * pModel, bool inPlace = false);
     void undoRotateTo();
+
     void swapIndices(unsigned int indexOfCurrent, unsigned int indexOfNew, PointSetModel * pModel);
 
-    const vector3 & getStartToTransformedCoordinates() const {return transformedCoordinates.front();}
-
-    inline vector3 & getPointerToTransformedCoordinate(int indexToFind){
-        auto locale = std::find(indicesInUse.begin(), indicesInUse.begin() + workingLimit, indexToFind);
-        int index = std::distance(indicesInUse.begin(), locale);
-
-//        if (index >= workingLimit){
-//            auto actual = std::find(indicesInUse.begin(), indicesInUse.end(), indexToFind);
-//            std::cout << " CAN NOT FIND  " << indexToFind << " => "<< index << " " << workingLimit << std::endl;
-//            std::cout << "    DISTANCE   " << std::distance(indicesInUse.begin(), actual) << " => " << " " << workingLimit << " | " << indicesInUse.size() << std::endl;
-//            exit(0);
-//        }
-        return transformedCoordinates[index];
-    };
+    inline const vector3 & getPointerToTransformedCoordinate(unsigned int indexToFind) const {
+        return transformedCoordinates[locate(indexToFind, "getPointerToTransformedCoordinate")];
+    }
 };
-
 
 #endif //IKETAMA_SUBUNIT_H

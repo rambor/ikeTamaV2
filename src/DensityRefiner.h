@@ -23,7 +23,11 @@
 //   amplitude   a_i = rho_i + eta (1 - rho_i)(1 - exp(-1.5 * sum_{nbr j} rho_j))   (hydration layer, contrast eta)
 //   I(q)        = c * F(q)^2 * sum_k S_k sinc(q d_k) + b,  S_k = sum of a_i a_j over the pairs in distance shell k.
 //               HCP distances are discrete (3 d^2/a^2 is an integer), so a single-point change updates the S_k in
-//               O(points) and I(q) in O(shells x q); no Debye-factor table.
+//               O(points) and I(q) in O(shells x q); no Debye-factor table. Lattice shells closer than
+//               Options::shellMerge (0.2 A) are merged at their pair-weighted mean distance (error in sinc ~ (q dr)^2/24,
+//               < 1e-4 at q = 0.25), which cuts the shell count about 3x.
+//   data        I(q) is averaged down to Options::pointsPerShannon points per Shannon channel (dmax qmax / pi) before
+//               fitting; the cost of every move is proportional to (shells x q points).
 //   energy      chi2(work) + lambda * mean((rho - rho_KDE)^2)/0.01 + mu * (sum rho / sum rho_KDE - 1)^2
 //               + w * KL(P(r)_data || P(r)_model)          (last term only when a P(r) is given)
 //               c and b by weighted least squares at every evaluation; alternate q points are held out (free set).
@@ -54,6 +58,8 @@ struct Data {                         // I(q) after rebinning; isFree marks the 
     unsigned int freeCount() const;
 };
 // average groups of 'rebin' points (0 = choose so that about 150 points remain); alternate points are held out
+// rebin factor that leaves about perShannon points per Shannon channel ((qmax - qmin) dmax / pi, at least 3 channels)
+int rebinForShannon(const std::vector<double> &q, double dmax, int perShannon);
 Data makeData(const std::vector<double> &q, const std::vector<double> &I, const std::vector<double> &sigma, int rebin = 0);
 // bin of a distance, IKETAMA PofRData::convertToBin convention (lower < d <= upper)
 int binIketama(double distance, double binWidth);
@@ -65,6 +71,8 @@ struct Options {
     double mu = 10.0;                 // total-density restraint
     double prWeight = 1000.0;         // weight of the P(r) term (used only when a P(r) target is set)
     double supportFraction = 0.02;    // support: KDE > fraction of its maximum ...
+    double shellMerge = 0.2;          // merge distance shells closer than this (A); 0 = exact lattice shells
+    int pointsPerShannon = 6;         // I(q) points per Shannon channel after rebinning (half are held out); 0 = ~150 points
     int dilate = 2;                   // ... dilated by this many lattice shells
     long sweeps = 100;                // moves per support point
     unsigned int seed = 1;
@@ -119,7 +127,7 @@ private:
     std::vector<std::array<int,12>> nbr; std::vector<int> nnbr;
     std::vector<double> rho0;
     std::vector<int> shellOfKey; std::vector<uint16_t> SM; int Msz = 0;
-    std::vector<double> shellD;
+    std::vector<double> shellD; int latticeShells = 0;
     std::vector<double> T;                             // T[k*nq + iq] = F(q)^2 sinc(q d_k)
     int nq = 0;
     std::vector<double> prTarget; std::vector<int> shellBin; int nbins = 0; double wP = 0;

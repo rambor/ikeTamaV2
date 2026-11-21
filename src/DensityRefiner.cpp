@@ -49,6 +49,14 @@ Data makeData(const std::vector<double> &q, const std::vector<double> &I, const 
     return D;
 }
 
+int rebinForShannon(const std::vector<double> &q, double dmax, int perShannon){
+    if (perShannon <= 0 || q.size() < 2 || dmax <= 0) return 0;
+    const double qlo = *std::min_element(q.begin(), q.end()), qhi = *std::max_element(q.begin(), q.end());
+    const double channels = std::max(3.0, std::ceil((qhi - qlo)*dmax/M_PI));
+    const double target = perShannon*channels;
+    return std::max(1, (int)std::floor(q.size()/target));
+}
+
 // HCP lattice (a1 = (a,0,0), a2 = (a/2, a sqrt3/2, 0), c = a sqrt(8/3)) inside a box
 static std::vector<V3> hcpLattice(double a, V3 lo, V3 hi){
     std::vector<V3> P;
@@ -147,14 +155,35 @@ Refiner::Refiner(const std::vector<V3> &beadsIn, const Data &data, const Options
             for (int j : near) if (nnbr[i] < 12) nbr[i][nnbr[i]++] = j;
         }
     }
-    // distance shells: key = round(3 d^2/a^2)
+    // distance shells: key = round(3 d^2/a^2); exact lattice shells closer than opt.shellMerge are merged
     long maxKey = 0;
     #pragma omp parallel for reduction(max:maxKey) schedule(dynamic, 16)
     for (int i=0;i<M;i++) for (int j=i+1;j<M;j++) maxKey = std::max(maxKey, std::lround(3.0*d2(pts[i],pts[j])/(a*a)));
-    std::vector<char> present(maxKey+1, 0); present[0]=1;
-    for (int i=0;i<M;i++) for (int j=i+1;j<M;j++) present[std::lround(3.0*d2(pts[i],pts[j])/(a*a))] = 1;
+    std::vector<long> pairCount(maxKey+1, 0); pairCount[0] = M;
+    #pragma omp parallel
+    {
+        std::vector<long> local(maxKey+1, 0);
+        #pragma omp for schedule(dynamic, 16)
+        for (int i=0;i<M;i++) for (int j=i+1;j<M;j++) local[std::lround(3.0*d2(pts[i],pts[j])/(a*a))]++;
+        #pragma omp critical(densrefine_shellcount)
+        for (long k=1;k<=maxKey;k++) pairCount[k] += local[k];
+    }
     shellOfKey.assign(maxKey+1, -1);
-    for (long k=0;k<=maxKey;k++) if (present[k]){ shellOfKey[k] = (int)shellD.size(); shellD.push_back(a*std::sqrt(k/3.0)); }
+    shellOfKey[0] = 0; shellD.assign(1, 0.0);                     // shell 0: the diagonal
+    {
+        double groupStart = -1, wsum = 0, dsum = 0;
+        for (long k=1;k<=maxKey;k++){
+            if (!pairCount[k]) continue;
+            const double d = a*std::sqrt(k/3.0);
+            if (groupStart < 0 || d - groupStart > opt.shellMerge){            // start a new merged shell
+                if (groupStart >= 0) shellD.back() = dsum/wsum;
+                shellD.push_back(d); groupStart = d; wsum = 0; dsum = 0;
+            }
+            shellOfKey[k] = (int)shellD.size() - 1; wsum += pairCount[k]; dsum += pairCount[k]*d;
+        }
+        if (groupStart >= 0) shellD.back() = dsum/wsum;
+    }
+    latticeShells = 0; for (long k=1;k<=maxKey;k++) if (pairCount[k]) latticeShells++;
     const int K = (int)shellD.size();
     if (K > 65535) throw std::runtime_error("DensityRefiner: too many distance shells");
     if ((size_t)M*M*2 < (size_t)1<<31){            // pair -> shell table (2 bytes per pair) when it fits in 2 GB
@@ -173,8 +202,8 @@ Refiner::Refiner(const std::vector<V3> &beadsIn, const Data &data, const Options
         T[(size_t)k*nq + iq] = F*F*((qd < 1e-9) ? 1.0 : std::sin(qd)/qd);
     }
     if (opt.verbose){
-        printf("  densrefine: %zu beads | lattice %.3f A, support %d points, %d distance shells | prior total %.0f cells (dry volume %.0f A^3)\n",
-               beads.size(), a, M, K, sumRho0, Vdry);
+        printf("  densrefine: %zu beads | lattice %.3f A, support %d points, %d distance shells (%d lattice shells, merged within %.2f A) | prior total %.0f cells (dry volume %.0f A^3)\n",
+               beads.size(), a, M, K, latticeShells + 1, opt.shellMerge, sumRho0, Vdry);
         printf("  densrefine: %d q points (q %.4f to %.4f), %d work / %d free\n", nq, D.q.front(), D.q.back(), nq - (int)D.freeCount(), (int)D.freeCount());
     }
 }

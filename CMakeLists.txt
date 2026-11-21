@@ -98,7 +98,6 @@ include(src/CMakeLists.txt)
 include(src/utils/CMakeLists.txt)
 include(src/EulerTour/CMakeLists.txt)
 include(src/Annealer/CMakeLists.txt)
-include(src/SHEMapper/CMakeLists.txt)
 
 MESSAGE("** SOURCE FILES => ${SOURCE_FILES}")
 

@@ -292,8 +292,14 @@ int main(int argc, char** argv) {
 
             densrefine::Options options;
 
-            //DensityMapper dm(maskFile, qmax, 2.61);
-            DensityMapper dm(maskFile, qmax, 2.71);
+            // total density from the mass; without a mass option, from the Porod volume of the P(r) file
+            // (protein: about 1.6 A^3 per Da hydrated -> kDa = V / 1600)
+            options.massKDa = prdata.getVolume()/1600.0;
+            if (options.massKDa <= 0) throw std::invalid_argument("  ERROR => cemap needs VOLUME in the P(r) file for the mass");
+            logger("MASS FROM POROD VOLUME (kDa)", formatNumber((float)options.massKDa, 1));
+            options.spacing = 0;   // take 2 x EDGE RADIUS of the aligned set
+
+            DensityMapper dm(maskFile);
             dm.refineModelDensity(workingsetSmoothed, &prdata, options);
             //
             return SUCCESS;
